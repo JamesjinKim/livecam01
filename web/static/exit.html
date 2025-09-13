@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHT CCTV 종료</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            background: white;
+            padding: 50px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .emoji {
+            font-size: 60px;
+            margin: 20px 0;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .message {
+            color: #666;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SHT CCTV 서비스 종료 중...</h1>
+        <p class="message">
+            <span class="success">✅ SHT CCTV 시스템이 안전하게 종료되었습니다.</span><br><br>
+            이제 모션 감지 시스템을 실행할 수 있습니다.<br>
+            브라우저를 닫으셔도 됩니다.
+        </p>
+    </div>
+    <script>
+        setTimeout(() => {
+            fetch('/api/shutdown', { method: 'POST' })
+                .catch(() => {});
+        }, 1000);
+    </script>
+</body>
+</html>

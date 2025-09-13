@@ -1,0 +1,385 @@
+/* SHT CCTV System Styles - Dual View Support */
+body { 
+    font-family: Arial, sans-serif; 
+    margin: 0; 
+    padding: 0;
+    background: #f5f5f5;
+    text-align: center;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    padding: 15px;
+    height: 100vh;
+    box-sizing: border-box;
+}
+
+h1 { 
+    color: #333; 
+    margin-bottom: 20px; 
+}
+
+.badge {
+    background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+    color: white;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 0.8em;
+    font-weight: bold;
+    margin-left: 10px;
+    display: inline-block;
+}
+
+.status {
+    margin: 10px 0;
+    padding: 10px;
+    background: #e9ecef;
+    border-radius: 8px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.status-item {
+    padding: 5px;
+    background: white;
+    border-radius: 4px;
+    border-left: 3px solid #28a745;
+    font-size: 11px;
+}
+
+.status-item strong {
+    color: #495057;
+}
+
+.status-item span {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.controls {
+    margin: 10px 0;
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+.control-section {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.control-section h3 {
+    margin: 0 0 10px 0;
+    color: #495057;
+    font-size: 14px;
+    font-weight: 600;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 버튼 그룹 컨테이너 */
+.button-group {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+    align-items: center;
+}
+
+/* 컨트롤 버튼 기본 스타일 */
+.control-btn {
+    padding: 8px 15px;
+    font-size: 13px;
+    font-weight: bold;
+    border: 2px solid #dee2e6;
+    background: white;
+    color: #495057;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 80px;
+    height: 35px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+}
+
+.control-btn:hover {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(40,167,69,0.3);
+}
+
+.control-btn.active {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+}
+
+/* 듀얼 뷰 활성 상태 */
+.control-btn.active-dual {
+    background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+    color: white;
+    border: none;
+}
+
+/* 듀얼 뷰 컨테이너 - 전체 영역을 효율적으로 사용 */
+.dual-view-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    overflow: auto;  /* 스크롤 가능 */
+    min-height: 0;
+    margin: 5px 0;
+    padding: 10px;
+    max-width: 100%;
+}
+
+.dual-view-container.hidden {
+    display: none;
+}
+
+/* 각 카메라 뷰 - 화면에 두 개가 나란히 잘 보이도록 크기 조정 */
+.camera-view {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: #333;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    border: 2px solid #ddd;
+    width: 640px;  /* 고정 너비 */
+    height: 480px;  /* 고정 높이 */
+}
+
+.camera-label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: bold;
+    z-index: 100;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.camera-view img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* 싱글 뷰 컨테이너 - 듀얼 뷰 전체 영역을 사용 */
+.single-view-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #333;
+    margin: 5px 0;
+    border: 2px solid #ddd;
+    min-height: 480px;  /* 최소 높이 설정 */
+    position: relative;  /* 라벨 위치 지정을 위해 추가 */
+}
+
+.single-view-container.hidden {
+    display: none;
+}
+
+.single-view-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* 해상도별 스타일링 - 480p */
+.resolution-640 .camera-view {
+    width: 640px;
+    height: 480px;
+}
+
+.resolution-640 .single-view-container {
+    max-width: 1280px;  /* 듀얼 뷰 전체 너비 (640x2) */
+    max-height: 480px;
+}
+
+/* 해상도별 스타일링 - 720p */
+.resolution-1280 .camera-view {
+    width: 640px;  /* 720p에서도 640x480 유지 */
+    height: 480px;
+}
+
+.resolution-1280 .single-view-container {
+    max-width: 1280px;  /* 듀얼 뷰 전체 너비 */
+    max-height: 480px;
+}
+
+/* 하트비트 인디케이터 스타일 */
+.heartbeat-container {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    vertical-align: middle;
+    min-width: 80px;
+    height: 33px;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    background: #f8f9fa;
+    padding: 6px 12px;
+    box-sizing: border-box;
+}
+
+.heartbeat-indicator {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    will-change: transform;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.heartbeat-indicator.green {
+    background: #28a745;
+    animation: pulse-green 1s infinite;
+}
+
+.heartbeat-indicator.yellow {
+    background: #ffc107;
+    animation: pulse-yellow 2s infinite;
+}
+
+.heartbeat-indicator.red {
+    background: #dc3545;
+    animation: none;
+}
+
+.heartbeat-indicator.black {
+    background: #6c757d;
+    animation: none;
+}
+
+@keyframes pulse-green {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    }
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+    }
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+    }
+}
+
+@keyframes pulse-yellow {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+    }
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+    }
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+    }
+}
+
+.heartbeat-text {
+    font-size: 11px;
+    font-weight: bold;
+    color: #495057;
+    flex-shrink: 0;
+}
+
+/* Status group layout */
+.status-group {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Info text */
+p {
+    text-align: center;
+    color: #6c757d;
+    font-size: 12px;
+    margin-top: auto;
+    padding: 5px;
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 1024px) {
+    .dual-view-container {
+        flex-direction: column;
+        max-height: none;
+    }
+    
+    .camera-view {
+        max-width: 100%;
+        max-height: 240px;
+        width: 640px;
+    }
+    
+    .single-view-container {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .controls {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .status-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .camera-view {
+        max-width: 100%;
+        max-height: 200px;
+    }
+}
+
+/* Hidden class */
+.hidden {
+    display: none !important;
+}

@@ -1,0 +1,14 @@
+# Smart Security System Dependencies
+# Auto-switching CCTV and Motion Detection System
+
+# Web Framework & API
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Computer Vision & Image Processing  
+opencv-python>=4.8.0
+numpy>=1.24.0
+pillow>=10.0.0
+
+# System Monitoring & Process Management
+psutil>=5.9.0

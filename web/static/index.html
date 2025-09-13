@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHT CCTV System</title>
+    <link rel="stylesheet" href="/static/style.css?v=2.4">
+</head>
+<body>
+    <div class="container">
+        <h1>SHT 듀얼 LIVE 카메라</h1>
+        
+        <div class="status">
+            <div class="status-grid">
+                <div class="status-item">
+                    <strong>활성 카메라:</strong> <span id="current-camera">듀얼</span>
+                </div>
+                <div class="status-item">
+                    <strong>해상도:</strong> <span id="resolution">640×480</span>
+                </div>
+                <div class="status-item">
+                    <strong>FPS:</strong> <span id="fps">0.0</span>
+                </div>
+                <div class="status-item">
+                    <strong>프레임 수:</strong> <span id="frame-count">0</span>
+                </div>
+                <div class="status-item">
+                    <strong>접속 클라이언트:</strong> <span id="client-count">0/2</span>
+                </div>
+                <div class="status-item">
+                    <strong>평균 프레임 크기:</strong> <span id="frame-size">0 KB</span>
+                </div>
+                <div class="status-item">
+                    <strong>보기 모드:</strong> <span id="view-mode">듀얼</span>
+                </div>
+                <div class="status-item">
+                    <strong>스트림 상태:</strong> <span id="stream-status">준비 중</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-section">
+                <h3>카메라 선택</h3>
+                <div class="button-group">
+                    <button class="control-btn camera-btn" id="dual-btn" onclick="switchToDualView()">
+                        듀얼 뷰
+                    </button>
+                    <button class="control-btn camera-btn" id="cam0-btn" onclick="switchToSingleView(0)">
+                        카메라 0
+                    </button>
+                    <button class="control-btn camera-btn" id="cam1-btn" onclick="switchToSingleView(1)">
+                        카메라 1
+                    </button>
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <h3>해상도 선택</h3>
+                <div class="button-group">
+                    <button class="control-btn resolution-btn active" id="res-640-btn" onclick="changeResolution('640x480')">
+                        📺 480p (640×480)
+                    </button>
+                    <button class="control-btn resolution-btn" id="res-720-btn" onclick="changeResolution('1280x720')">
+                        📺 720p (1280×720)
+                    </button>
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <h3>시스템 상태</h3>
+                <div class="status-group">
+                    <div class="heartbeat-container">
+                        <div class="heartbeat-indicator green" id="heartbeat-indicator"></div>
+                        <span class="heartbeat-text" id="heartbeat-text">LIVE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 듀얼 뷰 컨테이너 -->
+        <div class="dual-view-container resolution-640" id="dual-view">
+            <div class="camera-view">
+                <div class="camera-label">카메라 0</div>
+                <img id="video-stream-0" src="/stream/0" alt="Camera 0 Stream">
+            </div>
+            <div class="camera-view">
+                <div class="camera-label">카메라 1</div>
+                <img id="video-stream-1" src="/stream/1" alt="Camera 1 Stream">
+            </div>
+        </div>
+        
+        <!-- 싱글 뷰 컨테이너 -->
+        <div class="single-view-container resolution-640 hidden" id="single-view">
+            <div class="camera-label" id="single-camera-label">카메라 0</div>
+            <img id="video-stream-single" src="/stream" alt="Single Camera Stream">
+        </div>
+        
+        <p id="info-text">듀얼 뷰에서 두 카메라를 동시에 보거나, 카메라 버튼을 선택하여 하나의 카메라만 크게 볼 수 있습니다.</p>
+    </div>
+    
+    <script src="/static/script.js?v=2.5"></script>
+</body>
+</html>
