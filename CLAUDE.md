@@ -336,62 +336,10 @@ RECORDING_HEIGHT = 540  # 720 → 540
 
 ## 🚀 배포 및 운영
 
-### 자동 시작 설정 (systemd)
-```ini
-# /etc/systemd/system/cctv-stream.service
-[Unit]
-Description=CCTV Streaming System
-After=multi-user.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/livecam
-ExecStart=/usr/bin/python3 webmain.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```ini
-# /etc/systemd/system/motion-cam0.service
-[Unit]
-Description=Motion Detection Camera 0
-After=multi-user.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/livecam
-ExecStart=/usr/bin/python3 detection_cam0.py
-Restart=always
-RestartSec=15
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### 로그 로테이션
-```bash
-# /etc/logrotate.d/motion-events
-/home/pi/livecam/videos/motion_events/**/*.mp4 {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    missingok
-    notifempty
-}
-```
-
-### 백업 스크립트
-
 ## 🔮 향후 개발 계획
 
 ### 단기 개선사항 (1-2주)
-- [ ] 통합 웹 대시보드 (CCTV + 모션감지 상태)
+- [ ] 듀얼 라이브 CCTV
 - [ ] 모바일 반응형 UI 개선
 - [ ] 알림 시스템 (이메일, 웹훅)
 - [ ] 영상 썸네일 생성

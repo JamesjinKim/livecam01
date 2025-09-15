@@ -26,7 +26,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class Picamera2Recorder:
-    def __init__(self, camera_id=1, duration=30, resolution="1920x1080"):
+    def __init__(self, camera_id=1, duration=31, resolution="640x480"):
         """
         Picamera2 GPU 가속 H.264 레코더
         
@@ -40,7 +40,7 @@ class Picamera2Recorder:
         self.width, self.height = map(int, resolution.split('x'))
         
         # 저장 디렉토리 설정 (cam1용)
-        self.base_dir = Path("videos/picam2_rec/cam1")
+        self.base_dir = Path("videos/cam1")
         self.base_dir.mkdir(parents=True, exist_ok=True)
         
         # Picamera2 인스턴스
@@ -147,7 +147,7 @@ class Picamera2Recorder:
     def _generate_filename(self):
         """파일명 생성"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return self.base_dir / f"picam2_cam{self.camera_id}_{timestamp}.mp4"
+        return self.base_dir / f"cam{self.camera_id}_{timestamp}.mp4"
 
     def _record_single_video(self, output_path):
         """단일 비디오 녹화 (GPU 가속)"""
@@ -162,7 +162,7 @@ class Picamera2Recorder:
             
             # H.264 인코더 생성 (GPU 하드웨어 가속)
             self.encoder = H264Encoder(
-                bitrate=5000000,  # 5Mbps (1080p에 적합)
+                bitrate=5000000,  # 5Mbps (480p에 적합)
                 repeat=True,       # SPS/PPS 반복
                 iperiod=30,        # I-프레임 주기
                 framerate=30       # 30fps
@@ -287,11 +287,11 @@ def main():
         return
     
     # 기본 설정으로 바로 시작
-    resolution = "1920x1080"  # Full HD 기본값
-    duration = 30  # 30초 기본값
+    resolution = "640x480"  # 기본값
+    duration = 31  # 31초 -> 30초 영상 생성
     
-    print(f"\n[CONFIG] 해상도: {resolution} (Full HD)")
-    print(f"[CONFIG] 녹화 시간: {duration}초")
+    print(f"\n[CONFIG] 해상도: {resolution} (SD480p)")
+    print(f"[CONFIG] 녹화 시간: {duration}초 (실제 30초 영상 생성)")
     print(f"[CONFIG] 출력 형식: MP4 (H.264)")
     print(f"[CONFIG] 비트레이트: 5Mbps")
     

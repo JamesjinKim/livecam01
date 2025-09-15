@@ -28,8 +28,7 @@ OpenCV 기반 지능형 모션 감지 및 이벤트 녹화 시스템
 #### 🚀 자동 설치 (권장)
 ```bash
 # 저장소 클론
-git clone https://github.com/JamesjinKim/livecam1.git
-cd livecam1
+git clone https://github.com/JamesjinKim/livecam01.git
 
 #### 🔧 수동 설치
 ```bash
@@ -199,41 +198,6 @@ sudo ufw allow 8001
 sudo raspi-config
 # Advanced Options → Memory Split → 128
 ```
-
----
-
-🔧 라즈베리파이 부팅 시 자동 시작 구현 방법
-방법 1: systemd 서비스 (권장)
-Write(smart-security.service)
-write to smart-security.service
-
- [Unit]
- Description=Smart Security System - Integrated Controller
- After=multi-user.target network.target
- Wants=network.target
- 
- [Service]
- Type=simple
- User=shinho
- Group=shinho
- WorkingDirectory=/home/shinho/shinho/livecam
- ExecStart=/usr/bin/python3 
-/home/shinho/shinho/livecam/webmain.py
- Restart=always
- RestartSec=10
- 
- # 환경 변수 설정
- Environment=HOME=/home/shinho
- Environment=USER=shinho
- 
- # 로그 설정
- StandardOutput=journal
- StandardError=journal
- SyslogIdentifier=smart-security
- 
- [Install]
- WantedBy=multi-user.target
-
 
 ### 문서 참조 (2025.09 업데이트)
 - **PRD.md**: 상세 기술 명세 (Picamera2 버전 2.0 반영)

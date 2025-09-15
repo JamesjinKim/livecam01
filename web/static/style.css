@@ -1,4 +1,4 @@
-/* SHT CCTV System Styles - Dual View Support */
+/* SHT CCTV System Styles - Dual View Support + Recording Controls */
 body { 
     font-family: Arial, sans-serif; 
     margin: 0; 
@@ -137,11 +137,11 @@ h1 {
     border-color: #28a745;
 }
 
-/* 듀얼 뷰 활성 상태 */
+/* 듀얼 뷰 활성 상태 - 카메라 버튼과 동일한 스타일 */
 .control-btn.active-dual {
-    background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+    background: #28a745;
     color: white;
-    border: none;
+    border-color: #28a745;
 }
 
 /* 듀얼 뷰 컨테이너 - 전체 영역을 효율적으로 사용 */
@@ -242,6 +242,48 @@ h1 {
 .resolution-1280 .single-view-container {
     max-width: 1280px;  /* 듀얼 뷰 전체 너비 */
     max-height: 480px;
+}
+
+/* 녹화 버튼 전용 스타일 - 카메라 선택 버튼과 동일한 스타일 유지 */
+.recording-btn {
+    min-width: 120px;
+    font-size: 13px;
+}
+
+.recording-btn.recording-idle {
+    /* 기본 .control-btn 스타일과 동일 */
+    background: white;
+    border-color: #dee2e6;
+    color: #495057;
+}
+
+.recording-btn.recording-idle:hover {
+    background: #28a745;
+    color: white;
+    border-color: #28a745;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(40,167,69,0.3);
+}
+
+.recording-btn.recording-active {
+    background: #dc3545;
+    border-color: #dc3545;
+    color: white;
+    animation: pulse-red 1.5s infinite;
+}
+
+.recording-btn.recording-active:hover {
+    background: #c82333;
+    border-color: #bd2130;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(220,53,69,0.3);
+}
+
+/* 녹화 중 깜빡이는 애니메이션 */
+@keyframes pulse-red {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
 }
 
 /* 하트비트 인디케이터 스타일 */

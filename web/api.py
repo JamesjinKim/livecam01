@@ -4,11 +4,18 @@ FastAPI 라우터 모듈
 """
 
 import asyncio
+import subprocess
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, HTMLResponse, Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 import logging
+
+# uvicorn 서버
+import os
+import signal
+import threading
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +29,11 @@ class CCTVWebAPI:
         """
         self.app = FastAPI()
         self.camera_manager = camera_manager
-        
+        self.recording_processes = {}  # 녹화 프로세스 추적
+
         # 정적 파일 서빙 설정
         self.app.mount("/static", StaticFiles(directory="web/static"), name="static")
-        
+
         # 라우트 설정
         self.setup_routes()
     
@@ -158,13 +166,7 @@ class CCTVWebAPI:
             
             # 카메라 관리자를 통해 종료
             await self.camera_manager.shutdown()
-            
-            # uvicorn 서버 강제 종료
-            import os
-            import signal
-            import threading
-            import time
-            
+            #Uvicorn 서버 즉시 종료
             def force_shutdown():
                 time.sleep(1)
                 os._exit(0)  # 즉시 종료
@@ -174,3 +176,154 @@ class CCTVWebAPI:
             shutdown_thread.start()
             
             return {"success": True, "message": "System shutting down"}
+
+        @self.app.post("/api/recording/start/{camera_id}")
+        async def start_recording(camera_id: int):
+            """30초 녹화 시작 (스트리밍 중단 후 녹화 우선)"""
+            if camera_id not in [0, 1]:
+                raise HTTPException(status_code=400, detail="Invalid camera ID")
+
+            # 이미 녹화 중인지 확인
+            if camera_id in self.recording_processes:
+                proc = self.recording_processes[camera_id]
+                if proc.poll() is None:  # 프로세스가 아직 실행 중
+                    raise HTTPException(status_code=409, detail=f"Camera {camera_id} is already recording")
+
+            try:
+                # 1. 스트리밍 중단 (카메라 리소스 해제)
+                logger.info(f"[RECORDING] 카메라 {camera_id} 스트리밍 중단 중...")
+                if camera_id in self.camera_manager.camera_instances:
+                    self.camera_manager.stop_camera_stream(camera_id)
+
+                # 2. 녹화 스크립트 실행
+                script_name = f"rec_cam{camera_id}.py"
+                logger.info(f"[RECORDING] {script_name} 실행 중...")
+
+                proc = subprocess.Popen(
+                    ["python3", script_name],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    cwd=os.getcwd()
+                )
+
+                self.recording_processes[camera_id] = proc
+
+                # 3. 비동기로 녹화 완료 감지 및 스트리밍 재개
+                asyncio.create_task(self._monitor_recording(camera_id, proc))
+
+                return {
+                    "success": True,
+                    "message": f"Recording started for camera {camera_id}",
+                    "duration": 31,
+                    "note": "Live streaming paused during recording"
+                }
+
+            except Exception as e:
+                logger.error(f"[ERROR] 녹화 시작 실패: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to start recording: {str(e)}")
+
+        @self.app.post("/api/recording/stop/{camera_id}")
+        async def stop_recording(camera_id: int):
+            """녹화 강제 중지"""
+            if camera_id not in [0, 1]:
+                raise HTTPException(status_code=400, detail="Invalid camera ID")
+
+            if camera_id not in self.recording_processes:
+                raise HTTPException(status_code=404, detail=f"No recording process found for camera {camera_id}")
+
+            try:
+                proc = self.recording_processes[camera_id]
+                if proc.poll() is None:  # 프로세스가 실행 중이면
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                    logger.info(f"[RECORDING] 카메라 {camera_id} 녹화 강제 중지됨")
+
+                del self.recording_processes[camera_id]
+
+                # 스트리밍 재개
+                await self._resume_streaming_after_recording(camera_id)
+
+                return {"success": True, "message": f"Recording stopped for camera {camera_id}"}
+
+            except Exception as e:
+                logger.error(f"[ERROR] 녹화 중지 실패: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to stop recording: {str(e)}")
+
+        @self.app.get("/api/recording/status")
+        async def get_recording_status():
+            """녹화 상태 조회"""
+            status = {}
+
+            for camera_id in [0, 1]:
+                if camera_id in self.recording_processes:
+                    proc = self.recording_processes[camera_id]
+                    if proc.poll() is None:
+                        status[f"camera_{camera_id}"] = {
+                            "recording": True,
+                            "pid": proc.pid,
+                            "status": "active"
+                        }
+                    else:
+                        status[f"camera_{camera_id}"] = {
+                            "recording": False,
+                            "status": "completed",
+                            "exit_code": proc.returncode
+                        }
+                        # 완료된 프로세스 정리
+                        del self.recording_processes[camera_id]
+                else:
+                    status[f"camera_{camera_id}"] = {
+                        "recording": False,
+                        "status": "idle"
+                    }
+
+            return status
+
+    async def _monitor_recording(self, camera_id: int, proc: subprocess.Popen):
+        """녹화 프로세스 모니터링 및 완료 후 스트리밍 재개"""
+        try:
+            # 프로세스 완료 대기 (비동기)
+            while proc.poll() is None:
+                await asyncio.sleep(1)
+
+            # 녹화 완료 로그
+            exit_code = proc.returncode
+            if exit_code == 0:
+                logger.info(f"[RECORDING] 카메라 {camera_id} 녹화 완료 (정상 종료)")
+            else:
+                logger.warning(f"[RECORDING] 카메라 {camera_id} 녹화 종료 (exit code: {exit_code})")
+
+            # 프로세스 목록에서 제거
+            if camera_id in self.recording_processes:
+                del self.recording_processes[camera_id]
+
+            # 스트리밍 자동 재개
+            await self._resume_streaming_after_recording(camera_id)
+
+        except Exception as e:
+            logger.error(f"[ERROR] 녹화 모니터링 오류: {e}")
+
+    async def _resume_streaming_after_recording(self, camera_id: int):
+        """녹화 완료 후 스트리밍 재개"""
+        try:
+            # 잠시 대기 (카메라 리소스 안정화)
+            await asyncio.sleep(2)
+
+            # 듀얼 모드가 활성화된 경우 해당 카메라만 재시작
+            if self.camera_manager.dual_mode:
+                success = self.camera_manager.start_camera_stream(camera_id)
+                if success:
+                    logger.info(f"[STREAM] 카메라 {camera_id} 스트리밍 재개됨 (듀얼 모드)")
+                else:
+                    logger.error(f"[ERROR] 카메라 {camera_id} 스트리밍 재개 실패")
+
+            # 싱글 모드이고 현재 카메라가 녹화했던 카메라인 경우
+            elif self.camera_manager.current_camera == camera_id:
+                success = self.camera_manager.start_camera_stream(camera_id)
+                if success:
+                    logger.info(f"[STREAM] 카메라 {camera_id} 스트리밍 재개됨 (싱글 모드)")
+                else:
+                    logger.error(f"[ERROR] 카메라 {camera_id} 스트리밍 재개 실패")
+
+        except Exception as e:
+            logger.error(f"[ERROR] 스트리밍 재개 실패: {e}")
