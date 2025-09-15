@@ -179,7 +179,7 @@ class CCTVWebAPI:
 
         @self.app.post("/api/recording/start/{camera_id}")
         async def start_recording(camera_id: int):
-            """30초 녹화 시작 (스트리밍 중단 후 녹화 우선)"""
+            """30초 녹화 시작 (모든 스트리밍 중단 후 녹화 우선)"""
             if camera_id not in [0, 1]:
                 raise HTTPException(status_code=400, detail="Invalid camera ID")
 
@@ -190,10 +190,19 @@ class CCTVWebAPI:
                     raise HTTPException(status_code=409, detail=f"Camera {camera_id} is already recording")
 
             try:
-                # 1. 스트리밍 중단 (카메라 리소스 해제)
-                logger.info(f"[RECORDING] 카메라 {camera_id} 스트리밍 중단 중...")
-                if camera_id in self.camera_manager.camera_instances:
-                    self.camera_manager.stop_camera_stream(camera_id)
+                # 1. 모든 스트리밍 완전 중단 (카메라 리소스 완전 해제)
+                logger.info(f"[RECORDING] 모든 카메라 스트리밍 중단 중 (녹화 우선 모드)...")
+
+                # 듀얼 모드 비활성화
+                if self.camera_manager.dual_mode:
+                    self.camera_manager.disable_dual_mode()
+
+                # 모든 카메라 인스턴스 완전 정지
+                for cam_id in list(self.camera_manager.camera_instances.keys()):
+                    self.camera_manager.stop_camera_stream(cam_id)
+
+                # 카메라 리소스 안정화 대기
+                await asyncio.sleep(1.0)
 
                 # 2. 녹화 스크립트 실행
                 script_name = f"rec_cam{camera_id}.py"
@@ -215,7 +224,7 @@ class CCTVWebAPI:
                     "success": True,
                     "message": f"Recording started for camera {camera_id}",
                     "duration": 31,
-                    "note": "Live streaming paused during recording"
+                    "note": "All live streaming paused during recording"
                 }
 
             except Exception as e:
@@ -304,26 +313,34 @@ class CCTVWebAPI:
             logger.error(f"[ERROR] 녹화 모니터링 오류: {e}")
 
     async def _resume_streaming_after_recording(self, camera_id: int):
-        """녹화 완료 후 스트리밍 재개"""
+        """녹화 완료 후 자동 스트리밍 재개 (듀얼 모드 기본값)"""
         try:
-            # 잠시 대기 (카메라 리소스 안정화)
-            await asyncio.sleep(2)
+            # 카메라 리소스 안정화 대기
+            await asyncio.sleep(3)
 
-            # 듀얼 모드가 활성화된 경우 해당 카메라만 재시작
-            if self.camera_manager.dual_mode:
-                success = self.camera_manager.start_camera_stream(camera_id)
-                if success:
-                    logger.info(f"[STREAM] 카메라 {camera_id} 스트리밍 재개됨 (듀얼 모드)")
-                else:
-                    logger.error(f"[ERROR] 카메라 {camera_id} 스트리밍 재개 실패")
+            logger.info(f"[STREAM] 녹화 완료 후 자동 스트리밍 재개 시작...")
 
-            # 싱글 모드이고 현재 카메라가 녹화했던 카메라인 경우
-            elif self.camera_manager.current_camera == camera_id:
-                success = self.camera_manager.start_camera_stream(camera_id)
-                if success:
-                    logger.info(f"[STREAM] 카메라 {camera_id} 스트리밍 재개됨 (싱글 모드)")
+            # 듀얼 모드 자동 활성화 (기본값)
+            success = self.camera_manager.enable_dual_mode()
+            if success:
+                logger.info(f"[STREAM] 듀얼 모드 자동 재개 완료")
+            else:
+                # 듀얼 모드 실패 시 녹화했던 카메라만 재시작
+                logger.warning(f"[STREAM] 듀얼 모드 재개 실패, 카메라 {camera_id}만 재시작")
+                self.camera_manager.current_camera = camera_id
+                success_single = self.camera_manager.start_camera_stream(camera_id)
+                if success_single:
+                    logger.info(f"[STREAM] 카메라 {camera_id} 싱글 모드 재개 완료")
                 else:
-                    logger.error(f"[ERROR] 카메라 {camera_id} 스트리밍 재개 실패")
+                    logger.error(f"[ERROR] 카메라 {camera_id} 재개 완전 실패")
 
         except Exception as e:
             logger.error(f"[ERROR] 스트리밍 재개 실패: {e}")
+
+            # 최후 수단: 기본 카메라 0 시작
+            try:
+                self.camera_manager.current_camera = 0
+                self.camera_manager.start_camera_stream(0)
+                logger.info("[FALLBACK] 기본 카메라 0으로 폴백 재개")
+            except Exception as fallback_error:
+                logger.error(f"[CRITICAL] 폴백 재개도 실패: {fallback_error}")

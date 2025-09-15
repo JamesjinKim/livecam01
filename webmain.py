@@ -95,14 +95,15 @@ class CameraManager:
             # Picamera2 인스턴스 생성
             picam2 = Picamera2(camera_num=camera_id)
             
-            # Pi5 최적화 설정 (좌우 반전 포함)
+            # Pi5 최적화 설정 (좌우 반전 포함) - ISP 리소스 경합 해결
+            # 카메라별 다른 포맷 사용으로 색상 문제 방지
             config = picam2.create_video_configuration(
                 main={
                     "size": (width, height),
-                    "format": "YUV420"  # Pi5 GPU 최적화 포맷
+                    "format": "RGB888" if camera_id == 0 else "YUV420"  # 카메라별 다른 포맷으로 ISP 경합 방지
                 },
                 transform=libcamera.Transform(hflip=True),  # 좌우 반전 (거울 모드)
-                buffer_count=4,  # Pi5 메모리 대역폭 활용
+                buffer_count=2,  # 버퍼 수 감소로 리소스 분산 (4->2)
                 queue=False      # 레이턴시 최소화
             )
             

@@ -267,9 +267,7 @@ def _merge_video_files(self, input_files, output_file):
 
 #### 2. 스레드 안전성
 
-#### 3. 리소스 정리 시스템
-
-## 🔧 개발 도구 및 디버깅
+## 개발 도구 및 디버깅
 
 ### 로깅 시스템
 
@@ -279,15 +277,17 @@ def _merge_video_files(self, input_files, output_file):
 
 #### 리소스 사용량
 
-#### 성능 벤치마크 (2025.09 Picamera2 기준) ⚡
+#### 성능 벤치마크
 | 시스템 | CPU 사용률 | 메모리 | 디스크 I/O | 비고 |
 |--------|------------|--------|------------|------|
-| **Picamera2 CCTV (480p)** | ~**7%** | **40MB** | 1-2MB/s | 🚀 30% CPU 절약 |
-| **Picamera2 CCTV (720p)** | ~**11%** | **50MB** | 3-4MB/s | 🚀 27% CPU 절약 |
+| **CCTV (480p)** | ~7% | 40MB | 1-2MB/s | 듀얼 뷰 |
+| **CCTV (720p)** | ~11% | 50MB | 3-4MB/s | 듀얼 뷰 |
+| **녹화 (720p)** | ~8-10% | 30-40MB | 6-8MB/30s | 카메라당 |
+| **전체 시스템** | ~25-30% | 120MB | - | 모든 기능 |
 
 ### 문제 해결 가이드
 
-#### 1. Picamera2 CCTV 스트리밍 문제 ⚡
+#### 1. CCTV 스트리밍 문제
 ```bash
 # 카메라 하드웨어 확인
 rpicam-hello --list-cameras
@@ -303,76 +303,110 @@ sudo usermod -a -G video $USER
 vcgencmd get_mem gpu
 ```
 
-#### 2. 모션 감지 정확도 문제
-```python
-# 민감도 조정 (detection_cam0.py)
-CURRENT_SENSITIVITY = 'medium'  # low → medium으로 증가
-
-# 쿨다운 시간 조정
-SENSITIVITY_LEVELS['low']['cooldown'] = 8  # 12초 → 8초
-```
-
-#### 3. 영상 병합 오류
+#### 2. 녹화 문제
 ```bash
-# ffmpeg 설치 확인
-which ffmpeg
-ffmpeg -version
+# 카메라 사용 중인 프로세스 확인
+ps aux | grep rpicam
 
 # 디스크 공간 확인
-df -h /home/pi
+df -h /home/shinho
+
+# 파일 권한 확인
+ls -la videos/cam_rec/
+```
+
+#### 3. 듀얼 카메라 충돌
+```bash
+# ISP 리소스 확인
+dmesg | grep -i pisp
+
+# 카메라 리스트 확인
+rpicam-hello --list-cameras
 ```
 
 #### 4. 메모리 부족 문제
-```python
-# 프리버퍼 크기 감소
-PRE_BUFFER_DURATION = 3  # 5초 → 3초
+```bash
+# GPU 메모리 증가
+sudo raspi-config
+# Advanced Options → Memory Split → 256
 
-# 해상도 낮춤
-RECORDING_WIDTH = 960   # 1280 → 960
-RECORDING_HEIGHT = 540  # 720 → 540
+# 시스템 메모리 확인
+free -h
 ```
 
 ---
 
-## 🚀 배포 및 운영
+## 배포 및 운영
 
-## 🔮 향후 개발 계획
+### systemd 서비스 설정
+```bash
+# /etc/systemd/system/cctv.service
+[Unit]
+Description=CCTV Streaming System
+After=multi-user.target
 
-### 단기 개선사항 (1-2주)
-- [ ] 듀얼 라이브 CCTV
-- [ ] 모바일 반응형 UI 개선
-- [ ] 알림 시스템 (이메일, 웹훅)
-- [ ] 영상 썸네일 생성
+[Service]
+Type=simple
+User=shinho
+WorkingDirectory=/home/shinho/shinho/livecam1
+ExecStart=/usr/bin/python3 webmain.py
+Restart=always
 
-### 중기 개발 (1-2개월)
-- [ ] AI 기반 객체 감지 (사람/동물 구분)
-- [ ] 클라우드 백업 연동
-- [ ] 다중 클라이언트 지원 (읽기 전용)
-- [ ] REST API 확장
+[Install]
+WantedBy=multi-user.target
+```
 
-### 장기 비전 (3-6개월)
-- [ ] 다중 라즈베리파이 클러스터
-- [ ] 중앙 관제 시스템
-- [ ] 머신러닝 기반 이상 행동 감지
-- [ ] 음성/소음 감지 추가
+```bash
+# /etc/systemd/system/recording.service
+[Unit]
+Description=Camera Recording System
+After=multi-user.target
+
+[Service]
+Type=simple
+User=shinho
+WorkingDirectory=/home/shinho/shinho/livecam1
+ExecStart=/bin/bash -c "python3 rec_cam0.py & python3 rec_cam1.py"
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+## 향후 개발 계획
+
+### 단기 개선사항
+- 모바일 반응형 UI 개선
+- 영상 썸네일 생성
+- 디스크 공간 자동 관리
+
+### 중기 개발
+- 모션 감지 기반 이벤트 녹화
+- 클라우드 백업 연동
+- REST API 확장
+
+### 장기 비전
+- AI 기반 객체 감지
+- 다중 라즈베리파이 클러스터
+- 중앙 관제 시스템
 
 ---
 
-## 📚 참고 자료 및 의존성
+## 참고 자료 및 의존성
 
-### 외부 라이브러리 (2025.09 업데이트)
+### 외부 라이브러리
 ```python
 # requirements.txt
 fastapi>=0.104.0
 uvicorn>=0.24.0
-picamera2>=0.3.12          # ⚡ 새로 추가 (핵심 라이브러리)
+picamera2>=0.3.12
 opencv-python>=4.8.0
 numpy>=1.24.0
 pillow>=10.0.0
 psutil>=5.9.0
 ```
 
-### 시스템 패키지 (2025.09 업데이트)
+### 시스템 패키지
 ```bash
 # 기본 패키지
 sudo apt install -y rpicam-apps ffmpeg python3-opencv
@@ -407,7 +441,7 @@ git push origin feature/new-detection-algorithm
 
 ---
 
-## 🤝 기여 가이드
+## 기여 가이드
 
 ### 코드 기여
 1. 이슈 생성 및 논의
@@ -421,14 +455,16 @@ git push origin feature/new-detection-algorithm
 - **README.md**: 사용자 가이드 및 설치 방법
 - **CLAUDE.md**: 개발자 기술 문서 (현재 파일)
 
-### 테스트 가이드 (2025.09 Picamera2 기준)
+### 테스트 가이드
 ```bash
-# Picamera2 CCTV 시스템 테스트
-curl -I http://localhost:8001/stream  # 스트림 응답 확인 (HEAD 지원)
+# CCTV 시스템 테스트
+curl -I http://localhost:8001/stream  # 스트림 응답 확인
 curl http://localhost:8001/api/stats  # 통계 API 테스트
+
+# 녹화 시스템 테스트
+ls -la videos/cam_rec/cam0/           # 녹화 파일 확인
+ffprobe videos/cam_rec/cam0/*.mp4     # 영상 정보 확인
 
 # GPU 가속 확인
 dmesg | grep -i pisp                   # PiSP 하드웨어 가속 로그
 ```
-
-이 문서는 지속적으로 업데이트되며, 최신 버전은 항상 Git 저장소의 main 브랜치에서 확인할 수 있습니다.

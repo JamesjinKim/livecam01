@@ -85,13 +85,13 @@ class Picamera2Recorder:
             # Picamera2 인스턴스 생성
             self.picam2 = Picamera2(camera_num=self.camera_id)
             
-            # 비디오 설정 (GPU 최적화)
+            # 비디오 설정 (GPU 최적화) - ISP 리소스 경합 해결
             video_config = self.picam2.create_video_configuration(
                 main={
                     "size": (self.width, self.height),
-                    "format": "YUV420"  # H.264 인코딩에 최적
+                    "format": "RGB888"  # 카메라0은 RGB888 사용 (ISP 경합 방지)
                 },
-                buffer_count=4,  # 버퍼 수 최적화
+                buffer_count=2,  # 버퍼 수 감소로 리소스 분산 (4->2)
                 queue=False      # 프레임 드롭 방지
             )
             
