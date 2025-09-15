@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Videos - 영상 파일은 GitHub에 업로드하지 않음
+videos/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.h264
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Config files with secrets
+config.ini
+secrets.json
+*.key
