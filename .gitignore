@@ -40,3 +40,6 @@ temp/
 config.ini
 secrets.json
 *.key
+
+# Reference folder - 개발용 참고 파일들
+reference/

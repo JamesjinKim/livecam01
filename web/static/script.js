@@ -283,7 +283,7 @@ function checkStreamActivity() {
         if (indicator && text && statusElement) {
             indicator.className = 'heartbeat-indicator orange';
             text.textContent = 'REC';
-            statusElement.textContent = '녹화 중 - 모든 스트리밍 중단됨';
+            statusElement.textContent = '녹화 중 - 스트리밍 지속 중';
             statusElement.style.color = '#e74c3c';
         }
         return;
@@ -359,19 +359,7 @@ function toggleRecording(cameraId) {
         // 녹화 중지
         stopRecording(cameraId);
     } else {
-        // 녹화 시작 전 사용자 확인
-        const message = `카메라 ${cameraId} 녹화를 시작하면:\n\n🔴 모든 라이브 스트리밍이 일시 중단됩니다\n⏱️ 30초간 녹화가 진행됩니다\n🔄 녹화 완료 후 자동으로 듀얼 뷰 스트리밍이 재개됩니다\n\n계속하시겠습니까?`;
-
-        if (!confirm(message)) {
-            console.log(`[RECORDING] 카메라 ${cameraId} 녹화 시작 취소됨`);
-            return;
-        }
-
-        // 현재 뷰 모드 저장 (자동 복원용)
-        previousViewMode = currentViewMode;
-        previousCamera = currentCamera;
-
-        // 녹화 시작
+        // 녹화 시작 (확인 메시지 없이 직진)
         startRecording(cameraId);
     }
 }
@@ -389,7 +377,7 @@ function startRecording(cameraId) {
     // 스트리밍 상태 즉시 업데이트
     const streamStatusElement = document.getElementById('stream-status');
     if (streamStatusElement) {
-        streamStatusElement.textContent = '녹화 준비 중 - 스트리밍 일시 중단';
+        streamStatusElement.textContent = '녹화 준비 중 - 스트리밍 지속 중';
         streamStatusElement.style.color = '#ff6b35';
     }
 
@@ -409,9 +397,9 @@ function startRecording(cameraId) {
                 console.log(`[RECORDING] 카메라 ${cameraId} 녹화 시작 성공`);
                 recordingStates[cameraId] = true;
 
-                // 스트리밍 완전 중단 상태 표시
+                // 녹화 진행 상태 표시
                 if (streamStatusElement) {
-                    streamStatusElement.textContent = '녹화 중 - 모든 스트리밍 중단됨';
+                    streamStatusElement.textContent = '녹화 중 - 스트리밍 지속 중';
                     streamStatusElement.style.color = '#e74c3c';
                 }
 
@@ -639,9 +627,94 @@ function restoreToDualView() {
     console.log('[UI] 듀얼 뷰로 자동 복원 완료');
 }
 
+// 녹화 토글 함수 (HTML에서 호출)
+function toggleRecording(cameraId) {
+    console.log(`[RECORDING] 카메라 ${cameraId} 녹화 토글 요청`);
+
+    if (recordingStates[cameraId]) {
+        // 녹화 중이면 중지
+        stopRecording(cameraId);
+    } else {
+        // 대기 중이면 시작
+        startRecording(cameraId);
+    }
+}
+
 // 카메라 전환 (레거시 호환성)
 function switchCamera(cameraId) {
     switchToSingleView(cameraId);
+}
+
+// 녹화 시작 함수
+function startRecording(cameraId) {
+    console.log(`[RECORDING] 카메라 ${cameraId} 녹화 시작 요청`);
+
+    // 버튼 비활성화 및 로딩 상태
+    const button = document.getElementById(`record-cam${cameraId}-btn`);
+    if (button) {
+        button.textContent = `카메라${cameraId} 녹화 시작 중...`;
+        button.disabled = true;
+    }
+
+    fetch(`/api/recording/start/${cameraId}`, { method: 'POST' })
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 409) {
+                    throw new Error('이미 녹화 중입니다');
+                } else {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                console.log(`[RECORDING] 카메라 ${cameraId} 녹화 시작 성공`);
+                recordingStates[cameraId] = true;
+                updateRecordingButton(cameraId, true);
+
+                // 로그만 출력 (알림 메시지 제거)
+                console.log(`[SUCCESS] 카메라 ${cameraId} 30초 녹화 시작 성공`);
+            } else {
+                console.error(`[ERROR] 카메라 ${cameraId} 녹화 시작 실패:`, data);
+                // 실패 시에만 알림 표시
+                alert(`카메라 ${cameraId} 녹화 시작에 실패했습니다.`);
+            }
+        })
+        .catch(error => {
+            console.error(`[ERROR] 카메라 ${cameraId} 녹화 시작 실패:`, error);
+            alert(`카메라 ${cameraId} 녹화 시작에 실패했습니다: ${error.message}`);
+        })
+        .finally(() => {
+            // 버튼 상태 복원
+            if (button) {
+                button.disabled = false;
+                updateRecordingButton(cameraId, recordingStates[cameraId]);
+            }
+        });
+}
+
+// 녹화 중지 함수
+function stopRecording(cameraId) {
+    console.log(`[RECORDING] 카메라 ${cameraId} 녹화 중지 요청`);
+
+    fetch(`/api/recording/stop/${cameraId}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log(`[RECORDING] 카메라 ${cameraId} 녹화 중지 성공`);
+                recordingStates[cameraId] = false;
+                updateRecordingButton(cameraId, false);
+                // 중지 알림 제거
+            } else {
+                console.error(`[ERROR] 카메라 ${cameraId} 녹화 중지 실패:`, data);
+                alert(`카메라 ${cameraId} 녹화 중지에 실패했습니다.`);
+            }
+        })
+        .catch(error => {
+            console.error(`[ERROR] 카메라 ${cameraId} 녹화 중지 실패:`, error);
+            alert(`카메라 ${cameraId} 녹화 중지에 실패했습니다: ${error.message}`);
+        });
 }
 
 // 페이지 언로드 시 정리
