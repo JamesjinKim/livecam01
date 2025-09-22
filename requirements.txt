@@ -12,3 +12,6 @@ pillow>=10.0.0
 
 # System Monitoring & Process Management
 psutil>=5.9.0
+
+# Configuration Management
+PyYAML>=6.0

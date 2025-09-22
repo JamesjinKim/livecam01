@@ -13,6 +13,7 @@ import atexit
 import queue
 import cv2
 import numpy as np
+import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Set
@@ -36,12 +37,88 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+class ConfigManager:
+    """설정 파일 관리 클래스"""
+
+    def __init__(self, config_path="config.yaml"):
+        self.config_path = Path(config_path)
+        self.config = self.load_config()
+        logger.info(f"[CONFIG] 설정 파일 로드: {self.config_path}")
+
+    def load_config(self):
+        """config.yaml 파일 로드"""
+        if self.config_path.exists():
+            try:
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f)
+                    logger.info(f"[CONFIG] 설정 파일 로드 성공")
+                    return config
+            except Exception as e:
+                logger.error(f"[CONFIG] 설정 파일 로드 실패: {e}")
+                return self.get_default_config()
+        else:
+            logger.warning(f"[CONFIG] 설정 파일 없음, 기본값 사용: {self.config_path}")
+            return self.get_default_config()
+
+    def get_default_config(self):
+        """기본 설정값 반환 (하드코딩 대신)"""
+        return {
+            "camera": {
+                "default_resolution": "640x480",
+                "fps": 30,
+                "buffer_count": 2,
+                "mirror_mode": True,
+                "camera_0_format": "RGB888",
+                "camera_1_format": "YUV420"
+            },
+            "stream": {
+                "max_clients_480p": 2,
+                "max_clients_720p": 2,
+                "jpeg_quality": 85,
+                "target_fps": 30
+            },
+            "recording": {
+                "video_directory": "videos",
+                "segment_duration": 30,
+                "fourcc": "mp4v",
+                "output_fps": 30.0
+            },
+            "system": {
+                "log_level": "INFO",
+                "host": "0.0.0.0",
+                "port": 8001,
+                "auto_recording": True
+            },
+            "resolutions": {
+                "640x480": {"width": 640, "height": 480, "name": "480p", "max_clients": 2},
+                "1280x720": {"width": 1280, "height": 720, "name": "720p", "max_clients": 2}
+            }
+        }
+
+    def get(self, key_path, default=None):
+        """점 표기법으로 설정값 가져오기 (예: 'camera.fps')"""
+        keys = key_path.split('.')
+        value = self.config
+
+        for key in keys:
+            if isinstance(value, dict) and key in value:
+                value = value[key]
+            else:
+                return default
+
+        return value
+
+
 class FrameRecorder:
     """프레임 기반 녹화 클래스 - 스트리밍 중단 없이 녹화"""
 
-    def __init__(self, camera_id: int, save_dir: str = None):
+    def __init__(self, camera_id: int, save_dir: str = None, config_manager=None):
         self.camera_id = camera_id
-        self.save_dir = Path(save_dir or f"videos/cam{camera_id}")
+        self.config = config_manager or ConfigManager()
+
+        # config에서 비디오 디렉토리 로드
+        video_dir = self.config.get("recording.video_directory", "videos")
+        self.save_dir = Path(save_dir or f"{video_dir}/cam{camera_id}")
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
         # 녹화 상태
@@ -99,10 +176,11 @@ class FrameRecorder:
         output_path = date_folder / f"cam{self.camera_id}_{timestamp}.mp4"
 
         try:
-            # OpenCV VideoWriter 설정
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            fps = 30.0
-            frame_size = (640, 480)
+            # OpenCV VideoWriter 설정 (config에서 로드)
+            fourcc_str = self.config.get("recording.fourcc", "mp4v")
+            fourcc = cv2.VideoWriter_fourcc(*fourcc_str)
+            fps = self.config.get("recording.output_fps", 30.0)
+            frame_size = (640, 480)  # 현재는 고정, 향후 config 확장 가능
 
             writer = cv2.VideoWriter(
                 str(output_path),
@@ -161,24 +239,28 @@ class FrameRecorder:
 
 class CameraManager:
     """카메라 관리 핵심 클래스 (보호 대상)"""
-    
-    def __init__(self):
+
+    def __init__(self, config_manager=None):
+        # 설정 관리자 초기화
+        self.config = config_manager or ConfigManager()
+
+        # 설정에서 값 로드
         self.current_camera = 0
-        self.current_resolution = "640x480"
+        self.current_resolution = self.config.get("camera.default_resolution", "640x480")
         self.camera_instances = {}
         self.active_clients: Set[str] = set()
         self.dual_mode = False  # 듀얼 카메라 모드 플래그
         self.is_recording = False  # 녹화 상태 플래그 (리소스 경합 방지용)
 
         # 연속 녹화 시스템
-        self.recording_enabled = False
+        self.recording_enabled = self.config.get("system.auto_recording", False)
         self.recording_threads = {}
-        
-        # 해상도 설정
-        self.RESOLUTIONS = {
+
+        # 해상도 설정 (config에서 로드)
+        self.RESOLUTIONS = self.config.get("resolutions", {
             "640x480": {"width": 640, "height": 480, "name": "480p", "max_clients": 2},
             "1280x720": {"width": 1280, "height": 720, "name": "720p", "max_clients": 2}
-        }
+        })
         
         # 녹화 시스템
         self.recorders = {}
@@ -230,16 +312,20 @@ class CameraManager:
             # Picamera2 인스턴스 생성
             picam2 = Picamera2(camera_num=camera_id)
             
-            # Pi5 최적화 설정 - ISP 리소스 경합 해결
-            # 카메라별 다른 포맷 사용으로 색상 문제 방지
+            # Pi5 최적화 설정 - ISP 리소스 경합 해결 (config 기반)
+            camera_format = self.config.get(f"camera.camera_{camera_id}_format",
+                                           "RGB888" if camera_id == 0 else "YUV420")
+            buffer_count = self.config.get("camera.buffer_count", 2)
+            mirror_mode = self.config.get("camera.mirror_mode", True)
+
             config = picam2.create_video_configuration(
                 main={
                     "size": (width, height),
-                    "format": "RGB888" if camera_id == 0 else "YUV420"  # 카메라별 다른 포맷으로 ISP 경합 방지
+                    "format": camera_format  # config에서 카메라별 포맷 로드
                 },
-                buffer_count=2,  # 버퍼 수 감소로 리소스 분산 (4->2)
-                queue=False,     # 레이턴시 최소화
-                transform=libcamera.Transform(hflip=True)  # 좌우 반전 (거울모드)
+                buffer_count=buffer_count,  # config에서 버퍼 수 로드
+                queue=False,                # 레이턴시 최소화
+                transform=libcamera.Transform(hflip=mirror_mode)  # config에서 거울모드 설정
             )
 
             picam2.configure(config)
@@ -247,9 +333,12 @@ class CameraManager:
             
             self.camera_instances[camera_id] = picam2
 
-            # 녹화기 초기화
+            # 녹화기 초기화 (config 전달)
             if camera_id not in self.recorders:
-                self.recorders[camera_id] = FrameRecorder(camera_id)
+                self.recorders[camera_id] = FrameRecorder(camera_id, config_manager=self.config)
+
+            # 독립적인 프레임 캡처 스레드 시작 (녹화용)
+            self._start_recording_capture_thread(camera_id)
 
             logger.info(f"[OK] Picamera2 카메라 {camera_id} 시작됨 ({width}x{height})")
 
@@ -516,6 +605,46 @@ class CameraManager:
             recorder.stop_recording()
         logger.info("[RECORDING] 녹화 기능 비활성화")
 
+    def _start_recording_capture_thread(self, camera_id: int):
+        """녹화용 독립 프레임 캡처 스레드 시작"""
+        def capture_for_recording():
+            """녹화 전용 프레임 캡처 루프"""
+            picam2 = self.camera_instances.get(camera_id)
+            recorder = self.recorders.get(camera_id)
+
+            if not picam2 or not recorder:
+                logger.error(f"[CAPTURE] 카메라 {camera_id} 또는 녹화기 없음")
+                return
+
+            logger.info(f"[CAPTURE] 카메라 {camera_id} 녹화용 프레임 캡처 시작")
+
+            while camera_id in self.camera_instances:
+                try:
+                    # JPEG 프레임 직접 캡처
+                    import io
+                    stream = io.BytesIO()
+                    picam2.capture_file(stream, format='jpeg')
+                    frame_data = stream.getvalue()
+                    stream.close()
+
+                    if frame_data and len(frame_data) > 1000:  # 최소 크기 확인
+                        # 녹화기에 프레임 전달
+                        if recorder.is_recording:
+                            recorder.add_frame(frame_data)
+
+                    # 30 FPS 유지
+                    time.sleep(0.033)
+
+                except Exception as e:
+                    logger.error(f"[CAPTURE] 카메라 {camera_id} 캡처 오류: {e}")
+                    time.sleep(0.1)
+
+            logger.info(f"[CAPTURE] 카메라 {camera_id} 녹화용 프레임 캡처 종료")
+
+        # 데몬 스레드로 시작
+        thread = threading.Thread(target=capture_for_recording, daemon=True)
+        thread.start()
+
     def start_single_recording(self, camera_id: int, duration: int = 30):
         """30초 단위 녹화 (웹 UI용)"""
         if camera_id not in self.recorders:
@@ -550,17 +679,23 @@ class CameraManager:
         return self.recorders[camera_id].is_recording
 
     def get_stats(self) -> Dict[str, Any]:
-        """통계 정보 반환"""
+        """통계 정보 반환 - 웹 UI 호환"""
+        current_stats = self.stream_stats[self.current_camera]
+
         return {
-            "current_camera": self.current_camera,
-            "resolution": self.current_resolution,
-            "codec": "MJPEG",
-            "quality": "80-85%",
-            "engine": "Picamera2",
+            "stats": {
+                "fps": current_stats.get("fps", 0.0),
+                "frame_count": current_stats.get("frame_count", 0),
+                "avg_frame_size": current_stats.get("avg_frame_size", 0)
+            },
             "active_clients": len(self.active_clients),
             "max_clients": self.get_max_clients(),
-            "recording_enabled": self.recording_enabled,
-            "stats": self.stream_stats[self.current_camera]
+            "cameras": len(self.camera_instances),
+            "status": "running" if len(self.camera_instances) > 0 else "offline",
+            "current_camera": self.current_camera,
+            "resolution": self.current_resolution,
+            "dual_mode": self.dual_mode,
+            "recording_enabled": self.recording_enabled
         }
     
     def enable_dual_mode(self) -> bool:
@@ -612,9 +747,17 @@ class CameraManager:
 def main():
     """메인 함수"""
     logger.info("[INIT] SHT CCTV 시스템 시작")
-    
-    # 카메라 관리자 생성 (핵심 로직)
-    camera_manager = CameraManager()
+
+    # 설정 관리자 생성
+    config_manager = ConfigManager()
+
+    # 로그 레벨 설정 (config 기반)
+    log_level = config_manager.get("system.log_level", "INFO")
+    logging.getLogger().setLevel(getattr(logging, log_level.upper(), logging.INFO))
+    logger.info(f"[CONFIG] 로그 레벨: {log_level}")
+
+    # 카메라 관리자 생성 (설정 전달)
+    camera_manager = CameraManager(config_manager)
     
     # 커스텀 시그널 핸들러 - 즉시 종료
     def shutdown_handler(sig, _frame):
@@ -653,19 +796,25 @@ def main():
     # 기본 카메라 시작 중요한 부분임
     camera_manager.start_camera_stream(0)
 
-    #중요한 부분임 녹화 기능 활성화 (선택적)
-    #camera_manager.enable_recording()  # 자동 연속 녹화를 원할 경우 주석 해제
-    
-    # 서버 실행 - 시그널 핸들링 제어
+    # 자동 녹화 활성화 (config 기반)
+    if config_manager.get("system.auto_recording", True):
+        camera_manager.enable_recording()
+        logger.info("[CONFIG] 자동 녹화 활성화됨")
+
+    # 서버 실행 - 시그널 핸들링 제어 (config 기반)
+    host = config_manager.get("system.host", "0.0.0.0")
+    port = config_manager.get("system.port", 8001)
+    logger.info(f"[CONFIG] 서버 설정: {host}:{port}")
+
     try:
-        # uvicorn 서버 설정
-        config = uvicorn.Config(
+        # uvicorn 서버 설정 (config에서 로드)
+        server_config = uvicorn.Config(
             web_api.app,
-            host="0.0.0.0",
-            port=8001,
-            log_level="info"
+            host=host,
+            port=port,
+            log_level=log_level.lower()
         )
-        server = uvicorn.Server(config)
+        server = uvicorn.Server(server_config)
         
         # uvicorn의 install_signal_handlers 메서드 오버라이드
         server.install_signal_handlers = lambda: None

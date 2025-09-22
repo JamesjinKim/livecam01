@@ -1,0 +1,57 @@
+# SHT CCTV 시스템 설정 파일
+# webmain.py 전용 간소화 버전
+
+camera:
+  # 기본 해상도 설정
+  default_resolution: "640x480"  # 640x480 또는 1280x720
+
+  # 카메라 하드웨어 설정
+  fps: 30
+  buffer_count: 2
+  mirror_mode: true              # 거울모드 (hflip)
+
+  # ISP 설정 (카메라별 포맷)
+  camera_0_format: "RGB888"      # 카메라 0 포맷
+  camera_1_format: "YUV420"      # 카메라 1 포맷
+
+stream:
+  # 해상도별 클라이언트 제한
+  max_clients_480p: 2
+  max_clients_720p: 2
+
+  # JPEG 품질 설정
+  jpeg_quality: 85
+  target_fps: 30
+
+recording:
+  # 녹화 설정
+  video_directory: "videos"
+  segment_duration: 30           # 초 단위
+
+  # OpenCV VideoWriter 설정
+  fourcc: "mp4v"
+  output_fps: 30.0
+
+system:
+  # 로깅 설정
+  log_level: "INFO"              # DEBUG, INFO, WARNING, ERROR
+
+  # 웹 서버 설정
+  host: "0.0.0.0"
+  port: 8001
+
+  # 자동 녹화 활성화
+  auto_recording: true
+
+# 사용자 정의 해상도 (확장용)
+resolutions:
+  "640x480":
+    width: 640
+    height: 480
+    name: "480p"
+    max_clients: 2
+  "1280x720":
+    width: 1280
+    height: 720
+    name: "720p"
+    max_clients: 2

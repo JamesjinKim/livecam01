@@ -26,9 +26,15 @@ document.addEventListener('DOMContentLoaded', function() {
     checkStreamActivity();
     heartbeatInterval = setInterval(checkStreamActivity, 3000);
 
-    // 녹화 상태 체크 시작
+    // 녹화 상태 체크 활성화
     updateRecordingStatus();
-    recordingStatusInterval = setInterval(updateRecordingStatus, 2000);
+    recordingStatusInterval = setInterval(updateRecordingStatus, 3000);
+
+    // 스트리밍 상태 인디케이터 초기화
+    setTimeout(() => {
+        updateRecordingIndicator();
+        console.log('[INIT] Streaming indicator initialized');
+    }, 100); // DOM이 완전히 로드된 후 실행
 });
 
 // 듀얼 모드 초기화
@@ -221,9 +227,11 @@ function changeResolution(resolution) {
                     document.getElementById('single-view').className = 'single-view-container resolution-640' +
                         (currentViewMode === 'dual' ? ' hidden' : '');
                 } else {
-                    document.getElementById('res-720-btn').classList.add('active');
-                    document.getElementById('dual-view').className = 'dual-view-container resolution-1280';
-                    document.getElementById('single-view').className = 'single-view-container resolution-1280' +
+                    // 720p는 현재 지원하지 않음 - 기본값으로 처리
+                    console.warn('[RESOLUTION] 720p is not supported, defaulting to 640x480');
+                    document.getElementById('res-640-btn').classList.add('active');
+                    document.getElementById('dual-view').className = 'dual-view-container resolution-640';
+                    document.getElementById('single-view').className = 'single-view-container resolution-640' +
                         (currentViewMode === 'dual' ? ' hidden' : '');
                 }
 
@@ -271,25 +279,7 @@ function updateStats() {
 
 // 스트림 활성 상태 체크
 function checkStreamActivity() {
-    // 녹화 중이면 하트비트 체크 건너뛰기 (별도 상태 유지)
-    const isAnyRecording = recordingStates[0] || recordingStates[1];
-    if (isAnyRecording) {
-        console.log('[HEARTBEAT] 녹화 중이므로 상태 체크 건너뛰기 (REC 상태 유지)');
-
-        const indicator = document.getElementById('heartbeat-indicator');
-        const text = document.getElementById('heartbeat-text');
-        const statusElement = document.getElementById('stream-status');
-
-        if (indicator && text && statusElement) {
-            indicator.className = 'heartbeat-indicator orange';
-            text.textContent = 'REC';
-            statusElement.textContent = '녹화 중 - 스트리밍 지속 중';
-            statusElement.style.color = '#e74c3c';
-        }
-        return;
-    }
-
-    console.log('[HEARTBEAT] 상태 체크 시작, 모드:', currentViewMode);
+    console.log('[HEARTBEAT] 스트림 상태 체크 시작, 모드:', currentViewMode);
 
     // 현재 뷰 모드에 따라 적절한 스트림 체크
     const checkUrl = currentViewMode === 'dual' ? '/stream/0' : '/stream';
@@ -309,28 +299,36 @@ function checkStreamActivity() {
 
             if (response.status === 200) {
                 indicator.className = 'heartbeat-indicator green';
+                console.log('[DEBUG-HEARTBEAT] 첫번째 인디케이터 텍스트를 LIVE로 변경');
                 text.textContent = 'LIVE';
                 statusElement.textContent = '스트리밍 중';
                 statusElement.style.color = '#27ae60';
                 console.log('[HEARTBEAT] LIVE 상태');
+                updateRecordingIndicator(); // REC 인디케이터를 REC로 업데이트
             } else if (response.status === 503) {
                 indicator.className = 'heartbeat-indicator black';
+                console.log('[DEBUG-HEARTBEAT] 첫번째 인디케이터 텍스트를 OFFLINE로 변경');
                 text.textContent = 'OFFLINE';
                 statusElement.textContent = '오프라인';
                 statusElement.style.color = '#6c757d';
                 console.log('[HEARTBEAT] OFFLINE 상태');
+                updateRecordingIndicator(); // REC 인디케이터를 OFFLINE으로 업데이트
             } else if (response.status === 423) {
                 indicator.className = 'heartbeat-indicator yellow';
+                console.log('[DEBUG-HEARTBEAT] 첫번째 인디케이터 텍스트를 BUSY로 변경');
                 text.textContent = 'BUSY';
                 statusElement.textContent = '접속 제한';
                 statusElement.style.color = '#ffc107';
                 console.log('[HEARTBEAT] BUSY 상태');
+                updateRecordingIndicator(); // REC 인디케이터를 IDLE로 업데이트
             } else {
                 indicator.className = 'heartbeat-indicator yellow';
+                console.log('[DEBUG-HEARTBEAT] 첫번째 인디케이터 텍스트를 DELAY로 변경');
                 text.textContent = 'DELAY';
                 statusElement.textContent = '지연';
                 statusElement.style.color = '#ffc107';
                 console.log('[HEARTBEAT] DELAY 상태:', response.status);
+                updateRecordingIndicator(); // REC 인디케이터를 IDLE로 업데이트
             }
         })
         .catch(error => {
@@ -342,9 +340,11 @@ function checkStreamActivity() {
 
             if (indicator && text && statusElement) {
                 indicator.className = 'heartbeat-indicator black';
+                console.log('[DEBUG-HEARTBEAT] 첫번째 인디케이터 텍스트를 OFFLINE로 변경 (catch)');
                 text.textContent = 'OFFLINE';
                 statusElement.textContent = '서버 연결 끊김';
                 statusElement.style.color = '#6c757d';
+                updateRecordingIndicator(); // REC 인디케이터를 OFFLINE으로 업데이트
             }
         });
 }
@@ -403,13 +403,8 @@ function startRecording(cameraId) {
                     streamStatusElement.style.color = '#e74c3c';
                 }
 
-                // 하트비트 상태 업데이트
-                const indicator = document.getElementById('heartbeat-indicator');
-                const text = document.getElementById('heartbeat-text');
-                if (indicator && text) {
-                    indicator.className = 'heartbeat-indicator orange';
-                    text.textContent = 'REC';
-                }
+                // 녹화 시작 시 스트리밍 인디케이터는 건드리지 않음
+                // updateRecordingIndicator(); // 비활성화: 녹화와 스트리밍 상태 분리
 
                 console.log(`[UI] 카메라 ${cameraId} 녹화 중 UI 업데이트 완료`);
             } else {
@@ -457,6 +452,8 @@ function updateRecordingStatus() {
     fetch('/api/recording/status')
         .then(response => response.json())
         .then(data => {
+            console.log('[RECORDING-STATUS] 녹화 상태 조회:', data);
+
             // 카메라 0 상태 업데이트
             const cam0Status = data.camera_0;
             if (cam0Status) {
@@ -472,6 +469,9 @@ function updateRecordingStatus() {
                 updateRecordingButton(1, cam1Status.recording);
                 updateRecordingStatusText(1, cam1Status);
             }
+
+            // REC 상태 인디케이터 업데이트 (전체 시스템 녹화 상태 기반)
+            updateRecordingIndicatorBasedOnSystem(data.system_recording);
         })
         .catch(error => {
             console.error('[ERROR] 녹화 상태 조회 실패:', error);
@@ -491,6 +491,72 @@ function updateRecordingButton(cameraId, isRecording) {
         button.textContent = `카메라${cameraId} 녹화(30초)`;
         button.classList.remove('recording-active');
         button.classList.add('recording-idle');
+    }
+}
+
+// 두 번째 인디케이터 업데이트 (REC/IDLE/OFFLINE 표시)
+function updateRecordingIndicator() {
+    console.log('[DEBUG-FUNCTION] updateRecordingIndicator() 함수 호출됨');
+    const indicator = document.getElementById('recording-indicator');
+    const text = document.getElementById('recording-text');
+
+    if (!indicator || !text) {
+        console.log('[DEBUG-FUNCTION] recording-indicator 또는 recording-text 요소를 찾을 수 없음');
+        return;
+    }
+
+    // 하트비트 상태에 따른 REC/IDLE/OFFLINE 표시
+    const heartbeatStatus = document.getElementById('heartbeat-text')?.textContent;
+
+    console.log('[DEBUG-RECORDING] 두번째 인디케이터 업데이트 시작, heartbeatStatus:', heartbeatStatus);
+
+    if (heartbeatStatus === 'LIVE') {
+        // 스트리밍 중 = REC 상태
+        console.log('[DEBUG-RECORDING] 두번째 인디케이터 텍스트를 REC로 변경');
+        indicator.className = 'heartbeat-indicator orange';
+        text.textContent = 'REC';
+        text.style.color = '#e67e22';
+    } else if (heartbeatStatus === 'OFFLINE') {
+        // 오프라인 = OFFLINE 상태
+        console.log('[DEBUG-RECORDING] 두번째 인디케이터 텍스트를 REC OFF로 변경');
+        indicator.className = 'heartbeat-indicator black';
+        text.textContent = 'REC';
+        text.style.color = '#6c757d';
+    } else {
+        // 기타 상태 (DELAY, BUSY 등) = IDLE 상태
+        console.log('[DEBUG-RECORDING] 두번째 인디케이터 텍스트를 IDLE로 변경');
+        indicator.className = 'heartbeat-indicator gray';
+        text.textContent = 'IDLE';
+        text.style.color = '#95a5a6';
+    }
+
+    console.log('[DEBUG-RECORDING] 두번째 인디케이터 최종 텍스트:', text.textContent);
+}
+
+// 시스템 녹화 상태 기반 인디케이터 업데이트 (새로운 함수)
+function updateRecordingIndicatorBasedOnSystem(isSystemRecording) {
+    console.log('[DEBUG-RECORDING] 시스템 녹화 상태 기반 업데이트:', isSystemRecording);
+
+    const indicator = document.getElementById('recording-indicator');
+    const text = document.getElementById('recording-text');
+
+    if (!indicator || !text) {
+        console.log('[DEBUG-RECORDING] recording-indicator 또는 recording-text 요소를 찾을 수 없음');
+        return;
+    }
+
+    if (isSystemRecording) {
+        // 실제 녹화 중일 때
+        indicator.className = 'heartbeat-indicator red';
+        text.textContent = 'REC';
+        text.style.color = '#e74c3c';
+        console.log('[DEBUG-RECORDING] 시스템 녹화 중 - REC 표시');
+    } else {
+        // 녹화 중이 아닐 때
+        indicator.className = 'heartbeat-indicator gray';
+        text.textContent = 'IDLE';
+        text.style.color = '#95a5a6';
+        console.log('[DEBUG-RECORDING] 시스템 대기 중 - IDLE 표시');
     }
 }
 

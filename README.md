@@ -1,141 +1,209 @@
-# SHT 듀얼 LIVE 카메라
+# SHT 듀얼 LIVE 카메라 시스템
 
-라즈베리파이 5 기반 듀얼 카메라 CCTV 스트리밍 + 30초 연속 녹화 시스템
+라즈베리파이 5 기반 듀얼 카메라 CCTV 스트리밍 시스템입니다. 실시간 스트리밍과 자동 녹화 기능을 제공하며, 거울모드를 지원합니다.
 
-## 주요 기능
+## 🎯 주요 기능
 
-### CCTV 실시간 스트리밍
-- **듀얼/싱글 뷰**: 두 카메라 동시 보기 또는 개별 카메라 선택
-- **거울모드**: 좌우 반전 지원으로 자연스러운 화면
-- **다중 접속**: 최대 2명 동시 접속 (480p/720p)
-- **실시간 모니터링**: 웹 브라우저 기반 원격 접속
-- **하트비트**: LIVE/DELAY/ERROR 상태 실시간 표시
+- **듀얼 카메라 실시간 스트리밍** - 두 개의 카메라 동시 MJPEG 스트리밍
+- **다중 뷰 모드** - 듀얼 뷰 / 싱글 뷰 즉시 전환
+- **거울모드 지원** - 좌우 반전 모드 (hflip)
+- **다중 클라이언트** - 최대 2명 동시 접속 지원
+- **자동 녹화** - 30초 단위 연속 녹화 (24시간)
+- **실시간 모니터링** - 하트비트 기반 상태 표시
+- **반응형 웹 UI** - 모바일/데스크톱 지원
 
-### 30초 연속 녹화
-- **24시간 녹화**: 카메라 0, 1 독립적 30초 단위 연속 녹화
-- **자동 관리**: 날짜별 폴더 생성 및 타임스탬프 파일명
-- **안정적 저장**: 끊김없는 연속 녹화로 블랙박스 기능
+## 🏗️ 시스템 구성
 
-## 빠른 시작
+### 하드웨어 요구사항
+- **Raspberry Pi 5** (BCM2712)
+- **OV5647 카메라 모듈** × 2개
+- **MicroSD 카드** 32GB 이상
+- **GPU 메모리** 256MB 권장
 
-### 필수 요구사항
-- **하드웨어**: Raspberry Pi 5, OV5647 카메라 모듈 ×2
-- **OS**: Raspberry Pi OS (64-bit)
-- **Python**: 3.11+
+### 소프트웨어 스택
+- **백엔드**: FastAPI + Picamera2 + OpenCV
+- **프론트엔드**: Vanilla JavaScript + CSS
+- **스트리밍**: MJPEG over HTTP
+- **영상처리**: VideoCore VII GPU 가속
 
-### 설치
-```bash
-# 시스템 패키지 설치
-sudo apt update
-sudo apt install -y python3-picamera2 python3-libcamera ffmpeg python3-pip
+## 📁 프로젝트 구조
 
-# Python 의존성 설치
-pip3 install fastapi uvicorn picamera2 opencv-python numpy psutil --break-system-packages
-
-# 사용자 권한 설정
-sudo usermod -a -G video $USER
-# 재로그인 필요
-
-# GPU 메모리 설정 (권장: 256MB)
-sudo raspi-config  # Advanced Options → Memory Split → 256
+```
+livecam1/
+├── webmain.py              # 메인 CCTV 서버
+├── config.yaml             # 시스템 설정
+├── requirements.txt        # Python 의존성
+├── web/                    # 웹 인터페이스
+│   ├── api.py             # FastAPI 라우터
+│   └── static/
+│       ├── index.html     # 메인 페이지
+│       ├── style.css      # 스타일시트
+│       └── script.js      # JavaScript
+├── videos/                 # 녹화 파일 저장소
+│   └── cam_rec/           # 30초 단위 녹화
+│       ├── cam0/
+│       └── cam1/
+├── README.md              # 사용자 가이드 (현재 파일)
+└── CLAUDE.md              # 개발자 기술 문서
 ```
 
-## 사용 방법
+## 🚀 설치 및 실행
 
-### 1. CCTV 스트리밍 시작
+### 1. 시스템 패키지 설치
 ```bash
+# 필수 시스템 패키지
+sudo apt update
+sudo apt install -y python3-picamera2 python3-libcamera ffmpeg
+
+# GPU 메모리 설정 (권장)
+sudo raspi-config
+# Advanced Options > Memory Split > 256
+```
+
+### 2. Python 패키지 설치
+```bash
+pip3 install -r requirements.txt
+```
+
+### 3. 카메라 연결 확인
+```bash
+# 카메라 감지 확인
+rpicam-hello --list-cameras
+
+# 출력 예시:
+# 0 : ov5647 [2592x1944] (/base/axi/pcie@1000120000/rp1/i2c@88000/ov5647@36)
+# 1 : ov5647 [2592x1944] (/base/axi/pcie@1000120000/rp1/i2c@80000/ov5647@36)
+```
+
+### 4. 서버 실행
+```bash
+# CCTV 스트리밍 서버 시작
 python3 webmain.py
 ```
 
-### 2. 웹 접속
-```
-브라우저에서 접속: http://라즈베리파이_IP:8001
+### 5. 웹 접속
+브라우저에서 `http://라즈베리파이IP:8001` 접속
+
+## ⚙️ 설정
+
+### config.yaml 주요 설정
+
+```yaml
+camera:
+  default_resolution: "640x480"  # 기본 해상도
+  fps: 30                        # 프레임률
+  mirror_mode: true              # 거울모드 활성화
+
+stream:
+  max_clients_480p: 2            # 480p 최대 클라이언트
+  jpeg_quality: 85               # JPEG 품질
+
+recording:
+  segment_duration: 30           # 녹화 세그먼트 (초)
+  auto_recording: true           # 자동 녹화 활성화
+
+system:
+  host: "0.0.0.0"               # 서버 호스트
+  port: 8001                     # 서버 포트
 ```
 
-### 3. 30초 연속 녹화 (선택사항)
+## 🎮 사용법
+
+### 웹 인터페이스
+1. **듀얼 뷰**: 두 카메라 동시 보기
+2. **싱글 뷰**: 카메라 0 또는 1 개별 보기
+3. **해상도 변경**: 480p 지원
+4. **상태 모니터링**: 실시간 FPS, 클라이언트 수, 스트림 상태
+
+### 시스템 상태 표시기
+- **LIVE** (녹색): 정상 스트리밍
+- **DELAY** (노란색): 지연 발생
+- **BUSY** (노란색): 클라이언트 제한
+- **OFFLINE** (검은색): 서버 연결 끊김
+
+- **REC** (주황색): 정상 작동 중
+- **IDLE** (회색): 대기 상태
+- **OFFLINE** (검은색): 시스템 오프라인
+
+## 📊 성능 지표
+
+| 모드 | 해상도 | CPU 사용률 | 메모리 | 비고 |
+|------|--------|------------|--------|------|
+| 듀얼 스트리밍 | 480p | ~7% | 40MB | 2명 접속 |
+| 듀얼 스트리밍 | 720p | ~11% | 50MB | 2명 접속 |
+| 자동 녹화 | 720p | ~8-10% | 30-40MB | 카메라당 |
+| 통합 시스템 | - | ~25-30% | 120MB | 전체 기능 |
+
+## 🔧 문제해결
+
+### 카메라 인식 안됨
 ```bash
-# 터미널 1: 카메라 0 녹화
-python3 rec_cam0.py
-
-# 터미널 2: 카메라 1 녹화
-python3 rec_cam1.py
-```
-
-### 4. 웹 인터페이스 사용
-- **뷰 모드**: Dual View / Camera 0 / Camera 1 버튼으로 전환
-- **해상도**: 480p / 720p 선택
-- **상태 확인**: 실시간 통계 및 하트비트 모니터링
-
-## 파일 저장 위치
-```
-videos/cam_rec/
-├── cam0/
-│   └── 250916/    # YYMMDD 날짜별 폴더
-│       ├── cam0_20250916_143025.mp4
-│       └── cam0_20250916_143055.mp4
-└── cam1/
-    └── 250916/
-        ├── cam1_20250916_143025.mp4
-        └── cam1_20250916_143055.mp4
-```
-
-## 성능 지표
-| 기능 | CPU 사용률 | 메모리 | 비고 |
-|------|------------|--------|------|
-| CCTV (480p) | ~7% | 40MB | 듀얼 뷰 |
-| CCTV (720p) | ~11% | 50MB | 듀얼 뷰 |
-| 녹화 (720p) | ~8-10% | 30-40MB | 카메라당 |
-| 전체 시스템 | ~25-30% | 120MB | 모든 기능 |
-
-## 문제 해결
-
-### 카메라 인식 오류
-```bash
-# 카메라 연결 확인
+# 카메라 상태 확인
 rpicam-hello --list-cameras
-
-# Picamera2 라이브러리 확인
-python3 -c "from picamera2 import Picamera2; print('OK')"
 
 # 권한 확인
 groups | grep video
+sudo usermod -a -G video $USER
 ```
 
-### 스트리밍 문제
-- 네트워크 대역폭 확인
-- 해상도를 480p로 낮춰서 테스트
-- GPU 메모리 할당 확인: `vcgencmd get_mem gpu`
+### 스트리밍 끊김
+```bash
+# GPU 메모리 확인
+vcgencmd get_mem gpu
 
-### 녹화 문제
+# 프로세스 확인
+ps aux | grep python3
+```
+
+### 성능 최적화
+- GPU 메모리를 256MB로 설정
+- 불필요한 서비스 종료
 - 디스크 공간 확인: `df -h`
-- 카메라 사용 중인 프로세스 확인: `ps aux | grep python3`
 
-## 고급 설정
+## 🌐 API 엔드포인트
 
-### systemd 자동 시작
+### 스트리밍
+- `GET /stream/0` - 카메라 0 스트림
+- `GET /stream/1` - 카메라 1 스트림
+- `GET /stream` - 현재 활성 카메라 스트림
+
+### 제어
+- `POST /switch/{camera_id}` - 카메라 전환
+- `POST /api/dual_mode/{enable}` - 듀얼 모드 토글
+- `POST /api/resolution/{resolution}` - 해상도 변경
+
+### 상태
+- `GET /api/stats` - 시스템 통계
+- `GET /api/recording/status` - 녹화 상태
+
+## 📝 로그 및 디버깅
+
+로그 파일 위치: 콘솔 출력
+로그 레벨: `config.yaml`에서 설정 가능
+
 ```bash
-# /etc/systemd/system/cctv.service
-[Unit]
-Description=CCTV Streaming System
-After=multi-user.target
+# 실시간 로그 확인
+python3 webmain.py
 
-[Service]
-Type=simple
-User=shinho
-WorkingDirectory=/home/shinho/shinho/livecam1
-ExecStart=/usr/bin/python3 webmain.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
+# 디버그 모드
+# config.yaml에서 log_level: "DEBUG"로 설정
 ```
 
-```bash
-# 서비스 활성화
-sudo systemctl enable cctv.service
-sudo systemctl start cctv.service
-```
+## 🔒 보안 고려사항
+
+- 내부 네트워크에서만 사용 권장
+- 필요시 역방향 프록시(nginx) 사용
+- 방화벽 설정으로 포트 접근 제한
+
+## 🤝 기여
+
+이 프로젝트는 개인 프로젝트입니다. 버그 리포트나 개선 제안은 이슈로 등록해 주세요.
+
+## 📄 라이선스
+
+개인 사용 목적으로 제작된 프로젝트입니다.
 
 ---
 
-**마지막 업데이트**: 2025-09-16 (거울모드 추가)
+**마지막 업데이트**: 2025-09-22
+**버전**: 3.0 (영상녹화 버튼 제거, UI 최적화)

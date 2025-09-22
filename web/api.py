@@ -202,7 +202,8 @@ class CCTVWebAPI:
 
             try:
                 # 30초 녹화 시작 (스트리밍 중단 없이)
-                success = recorder.start_recording(duration=30)
+                recorder.start_recording()
+                success = True
 
                 if success:
                     return {
@@ -252,7 +253,7 @@ class CCTVWebAPI:
 
         @self.app.get("/api/recording/status")
         async def get_recording_status():
-            """녹화 상태 조회"""
+            """녹화 상태 조회 - 웹 UI 호환"""
             status = {}
 
             for camera_id in [0, 1]:
@@ -272,7 +273,66 @@ class CCTVWebAPI:
                         "status": "not_initialized"
                     }
 
-            return status
+            # 전체 시스템 녹화 상태 추가
+            any_recording = any(
+                recorder.is_recording for recorder in self.camera_manager.recorders.values()
+            )
 
-    # 기존 프로세스 기반 녹화 관련 함수들은 제거됨
-    # 이제 프레임 공유 방식을 사용하여 스트리밍 중단 없이 녹화
+            return {
+                **status,
+                "system_recording": any_recording,
+                "timestamp": time.time()
+            }
+
+        @self.app.get("/api/system/status")
+        async def get_system_status():
+            """전체 시스템 상태 조회"""
+            # 기본 통계
+            stats = self.camera_manager.get_stats()
+
+            # 카메라별 상세 정보
+            cameras = {}
+            for camera_id in [0, 1]:
+                recorder = self.camera_manager.recorders.get(camera_id)
+                camera_active = camera_id in self.camera_manager.camera_instances
+
+                cameras[camera_id] = {
+                    "active": camera_active,
+                    "recording": recorder.is_recording if recorder else False,
+                    "stats": self.camera_manager.stream_stats.get(camera_id, {})
+                }
+
+            # 시스템 전체 상태
+            any_camera_active = len(self.camera_manager.camera_instances) > 0
+            any_recording = any(
+                recorder.is_recording for recorder in self.camera_manager.recorders.values()
+            )
+
+            return {
+                "system": {
+                    "status": "online" if any_camera_active else "offline",
+                    "streaming": any_camera_active,
+                    "recording": any_recording,
+                    "dual_mode": self.camera_manager.dual_mode,
+                    "current_camera": self.camera_manager.current_camera,
+                    "resolution": self.camera_manager.current_resolution,
+                    "active_clients": len(self.camera_manager.active_clients),
+                    "max_clients": self.camera_manager.get_max_clients()
+                },
+                "cameras": cameras,
+                "stats": stats
+            }
+
+        @self.app.get("/api/heartbeat")
+        async def heartbeat():
+            """간단한 heartbeat 체크"""
+            return {
+                "status": "alive",
+                "timestamp": time.time(),
+                "streaming": len(self.camera_manager.camera_instances) > 0,
+                "recording": any(
+                    recorder.is_recording for recorder in self.camera_manager.recorders.values()
+                )
+            }
+
+    # 프레임 공유 방식을 사용하여 스트리밍 중단 없이 녹화

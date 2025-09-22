@@ -36,12 +36,6 @@
                 <div class="status-item">
                     <strong>스트림 상태:</strong> <span id="stream-status">준비 중</span>
                 </div>
-                <div class="status-item">
-                    <strong>카메라 0 녹화:</strong> <span id="recording-cam0">대기</span>
-                </div>
-                <div class="status-item">
-                    <strong>카메라 1 녹화:</strong> <span id="recording-cam1">대기</span>
-                </div>
             </div>
         </div>
         
@@ -70,17 +64,6 @@
                 </div>
             </div>
             
-            <div class="control-section">
-                <h3>영상 녹화</h3>
-                <div class="button-group">
-                    <button class="control-btn recording-btn" id="record-cam0-btn" onclick="toggleRecording(0)">
-                        카메라0 녹화(30초)
-                    </button>
-                    <button class="control-btn recording-btn" id="record-cam1-btn" onclick="toggleRecording(1)">
-                        카메라1 녹화(30초)
-                    </button>
-                </div>
-            </div>
 
             <div class="control-section">
                 <h3>시스템 상태</h3>
@@ -88,6 +71,10 @@
                     <div class="heartbeat-container">
                         <div class="heartbeat-indicator green" id="heartbeat-indicator"></div>
                         <span class="heartbeat-text" id="heartbeat-text">LIVE</span>
+                    </div>
+                    <div class="heartbeat-container">
+                        <div class="heartbeat-indicator orange" id="recording-indicator"></div>
+                        <span class="heartbeat-text" id="recording-text">REC</span>
                     </div>
                 </div>
             </div>
@@ -114,6 +101,6 @@
         <p id="info-text">듀얼 뷰에서 두 카메라를 동시에 보거나, 카메라 버튼을 선택하여 하나의 카메라만 크게 볼 수 있습니다.</p>
     </div>
     
-    <script src="/static/script.js?v=2.6"></script>
+    <script src="/static/script.js?v=3.0"></script>
 </body>
 </html>
