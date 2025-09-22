@@ -313,6 +313,7 @@ function checkStreamActivity() {
                 statusElement.style.color = '#6c757d';
                 console.log('[HEARTBEAT] OFFLINE 상태');
                 updateRecordingIndicator(); // REC 인디케이터를 OFFLINE으로 업데이트
+                resetRecordingButtonsOnOffline(); // 녹화 제어 버튼 초기화
             } else if (response.status === 423) {
                 indicator.className = 'heartbeat-indicator yellow';
                 console.log('[DEBUG-HEARTBEAT] 첫번째 인디케이터 텍스트를 BUSY로 변경');
@@ -345,6 +346,7 @@ function checkStreamActivity() {
                 statusElement.textContent = '서버 연결 끊김';
                 statusElement.style.color = '#6c757d';
                 updateRecordingIndicator(); // REC 인디케이터를 OFFLINE으로 업데이트
+                resetRecordingButtonsOnOffline(); // 녹화 제어 버튼 초기화
             }
         });
 }
@@ -470,11 +472,23 @@ function updateRecordingStatus() {
                 updateRecordingStatusText(1, cam1Status);
             }
 
-            // REC 상태 인디케이터 업데이트 (전체 시스템 녹화 상태 기반)
-            updateRecordingIndicatorBasedOnSystem(data.system_recording);
+            // REC 상태 인디케이터 업데이트 (전체 시스템 녹화 상태 + 모드별 구분)
+            const recordingData = {
+                camera_0: data.camera_0,
+                camera_1: data.camera_1
+            };
+            const continuousActive = data.continuous_recording_active || false;
+            updateRecordingIndicatorBasedOnSystem(data.system_recording, recordingData, continuousActive);
         })
         .catch(error => {
             console.error('[ERROR] 녹화 상태 조회 실패:', error);
+
+            // 서버 연결 오류 시 녹화 버튼 초기화
+            const heartbeatStatus = document.getElementById('heartbeat-text')?.textContent;
+            if (heartbeatStatus === 'OFFLINE') {
+                console.log('[RECORDING-STATUS] OFFLINE 상태로 인한 녹화 버튼 초기화');
+                resetRecordingButtonsOnOffline();
+            }
         });
 }
 
@@ -534,8 +548,8 @@ function updateRecordingIndicator() {
 }
 
 // 시스템 녹화 상태 기반 인디케이터 업데이트 (새로운 함수)
-function updateRecordingIndicatorBasedOnSystem(isSystemRecording) {
-    console.log('[DEBUG-RECORDING] 시스템 녹화 상태 기반 업데이트:', isSystemRecording);
+function updateRecordingIndicatorBasedOnSystem(isSystemRecording, recordingData = null, continuousActive = false) {
+    console.log('[DEBUG-RECORDING] 시스템 녹화 상태 기반 업데이트:', isSystemRecording, recordingData, continuousActive);
 
     const indicator = document.getElementById('recording-indicator');
     const text = document.getElementById('recording-text');
@@ -545,12 +559,29 @@ function updateRecordingIndicatorBasedOnSystem(isSystemRecording) {
         return;
     }
 
-    if (isSystemRecording) {
-        // 실제 녹화 중일 때
-        indicator.className = 'heartbeat-indicator red';
-        text.textContent = 'REC';
-        text.style.color = '#e74c3c';
-        console.log('[DEBUG-RECORDING] 시스템 녹화 중 - REC 표시');
+    // 연속 녹화가 활성화되어 있으면 항상 녹화 중으로 표시
+    if (continuousActive || (isSystemRecording && recordingData)) {
+        // 녹화 모드별 표시
+        const isManualRecording = recordingData && Object.values(recordingData).some(camData =>
+            camData.recording && camData.recording_mode === 'manual_single'
+        );
+        const isAutoRecording = continuousActive || (recordingData && Object.values(recordingData).some(camData =>
+            camData.recording && camData.recording_mode === 'auto_continuous'
+        ));
+
+        if (isManualRecording) {
+            // 수동 녹화 중 - 빨간색, 깜빡임 없음 (고정)
+            indicator.className = 'heartbeat-indicator red';
+            text.textContent = 'REC';
+            text.style.color = '#e74c3c';
+            console.log('[DEBUG-RECORDING] 수동 녹화 중 - 빨간색 고정');
+        } else if (isAutoRecording) {
+            // 자동 연속 녹화 중 - 오렌지색, 깜빡임
+            indicator.className = 'heartbeat-indicator orange';
+            text.textContent = 'REC';
+            text.style.color = '#e67e22';
+            console.log('[DEBUG-RECORDING] 자동 연속 녹화 중 - 오렌지색 깜빡임');
+        }
     } else {
         // 녹화 중이 아닐 때
         indicator.className = 'heartbeat-indicator gray';
@@ -781,6 +812,35 @@ function stopRecording(cameraId) {
             console.error(`[ERROR] 카메라 ${cameraId} 녹화 중지 실패:`, error);
             alert(`카메라 ${cameraId} 녹화 중지에 실패했습니다: ${error.message}`);
         });
+}
+
+// 시스템 OFFLINE 시 녹화 버튼 초기화
+function resetRecordingButtonsOnOffline() {
+    console.log('[OFFLINE] 녹화 제어 버튼 초기화');
+
+    // 모든 녹화 상태를 초기화
+    recordingStates[0] = false;
+    recordingStates[1] = false;
+
+    // 카메라 0 버튼 초기화
+    const button0 = document.getElementById('record-cam0-btn');
+    if (button0) {
+        button0.textContent = '카메라0 녹화(30초)';
+        button0.classList.remove('recording-active');
+        button0.classList.add('recording-idle');
+        button0.disabled = false;
+    }
+
+    // 카메라 1 버튼 초기화
+    const button1 = document.getElementById('record-cam1-btn');
+    if (button1) {
+        button1.textContent = '카메라1 녹화(30초)';
+        button1.classList.remove('recording-active');
+        button1.classList.add('recording-idle');
+        button1.disabled = false;
+    }
+
+    console.log('[OFFLINE] 녹화 제어 버튼 초기화 완료');
 }
 
 // 페이지 언로드 시 정리

@@ -201,20 +201,20 @@ class CCTVWebAPI:
                 }
 
             try:
-                # 30초 녹화 시작 (스트리밍 중단 없이)
-                recorder.start_recording()
-                success = True
+                # 수동 녹화 시작 (자동 녹화 일시 중단 후)
+                success = self.camera_manager.start_manual_recording(camera_id, duration=30)
 
                 if success:
                     return {
                         "success": True,
-                        "message": f"카메라 {camera_id} 녹화 시작 (30초)",
+                        "message": f"카메라 {camera_id} 수동 녹화 시작 (30초)",
                         "camera_id": camera_id,
                         "duration": 30,
-                        "note": "스트리밍 중단 없이 녹화 진행"
+                        "mode": "manual_single",
+                        "note": "자동 녹화 일시 중단 후 수동 녹화 시작. 30초 후 자동 녹화 재개"
                     }
                 else:
-                    raise HTTPException(status_code=500, detail="녹화 시작 실패")
+                    raise HTTPException(status_code=500, detail="수동 녹화 시작 실패")
 
             except Exception as e:
                 logger.error(f"[ERROR] 녹화 시작 오류: {e}")
@@ -263,14 +263,18 @@ class CCTVWebAPI:
                 if recorder:
                     status[f"camera_{camera_id}"] = {
                         "recording": recorder.is_recording,
+                        "recording_mode": recorder.recording_mode,
                         "camera_active": camera_active,
-                        "status": "recording" if recorder.is_recording else "idle"
+                        "status": "recording" if recorder.is_recording else "idle",
+                        "auto_paused": self.camera_manager.recording_paused.get(camera_id, False)
                     }
                 else:
                     status[f"camera_{camera_id}"] = {
                         "recording": False,
+                        "recording_mode": None,
                         "camera_active": camera_active,
-                        "status": "not_initialized"
+                        "status": "not_initialized",
+                        "auto_paused": False
                     }
 
             # 전체 시스템 녹화 상태 추가
@@ -278,9 +282,13 @@ class CCTVWebAPI:
                 recorder.is_recording for recorder in self.camera_manager.recorders.values()
             )
 
+            # 연속 녹화 활성 상태 확인 (IDLE 방지)
+            continuous_active = getattr(self.camera_manager, 'continuous_recording_active', False)
+
             return {
                 **status,
-                "system_recording": any_recording,
+                "system_recording": any_recording or continuous_active,
+                "continuous_recording_active": continuous_active,
                 "timestamp": time.time()
             }
 

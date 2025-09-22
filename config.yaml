@@ -43,6 +43,9 @@ system:
   # 자동 녹화 활성화
   auto_recording: true
 
+  # 듀얼 카메라 모드 설정
+  dual_camera_mode: true
+
 # 사용자 정의 해상도 (확장용)
 resolutions:
   "640x480":

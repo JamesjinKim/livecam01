@@ -123,9 +123,11 @@ class FrameRecorder:
 
         # 녹화 상태
         self.is_recording = False
+        self.recording_mode = None  # "auto_continuous" 또는 "manual_single"
         self.frame_queue = queue.Queue(maxsize=900)  # 30초 버퍼 (30fps)
         self.recording_thread = None
         self.video_writer = None
+        self.completion_callback = None  # 녹화 완료 콜백
 
         logger.info(f"[RECORDER] 카메라 {camera_id} 녹화기 초기화")
 
@@ -143,36 +145,54 @@ class FrameRecorder:
         except queue.Full:
             pass
 
-    def start_recording(self, duration: int = 30):
+    def start_recording(self, duration: int = 30, mode: str = "auto_continuous", completion_callback=None, timestamp_str=None):
         """녹화 시작"""
         if self.is_recording:
-            logger.warning(f"[RECORDER] 카메라 {self.camera_id} 이미 녹화 중")
+            logger.warning(f"[RECORDER] 카메라 {self.camera_id} 이미 녹화 중 (모드: {self.recording_mode})")
             return False
 
         self.is_recording = True
+        self.recording_mode = mode
+        self.completion_callback = completion_callback
         self.recording_thread = threading.Thread(
             target=self._record_video,
-            args=(duration,),
+            args=(duration, timestamp_str),
             daemon=True
         )
         self.recording_thread.start()
-        logger.info(f"[RECORDER] 카메라 {self.camera_id} 녹화 시작 ({duration}초)")
+        logger.info(f"[RECORDER] 카메라 {self.camera_id} 녹화 시작 ({duration}초, 모드: {mode})")
         return True
+
+    def force_stop_recording(self):
+        """녹화 강제 중지 (모드 무관)"""
+        if self.is_recording:
+            self.is_recording = False
+            self.recording_mode = None
+            if self.recording_thread:
+                self.recording_thread.join(timeout=2)
+            logger.info(f"[RECORDER] 카메라 {self.camera_id} 녹화 강제 중지")
+            return True
+        return False
 
     def stop_recording(self):
         """녹화 중지"""
         self.is_recording = False
         if self.recording_thread:
             self.recording_thread.join(timeout=2)
-        logger.info(f"[RECORDER] 카메라 {self.camera_id} 녹화 중지")
+        logger.info(f"[RECORDER] 카메라 {self.camera_id} 녹화 중지 (모드: {self.recording_mode})")
+        self.recording_mode = None
 
-    def _record_video(self, duration: int):
+    def _record_video(self, duration: int, timestamp_str: str = None):
         """비디오 녹화 스레드"""
         # 날짜별 폴더 생성
         date_folder = self.save_dir / datetime.now().strftime("%y%m%d")
         date_folder.mkdir(parents=True, exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 동기화된 타임스탬프 사용 (제공되면 사용, 아니면 현재 시간)
+        if timestamp_str:
+            timestamp = timestamp_str
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = date_folder / f"cam{self.camera_id}_{timestamp}.mp4"
 
         try:
@@ -199,7 +219,12 @@ class FrameRecorder:
             logger.info(f"[RECORDER] 녹화 시작: {output_path.name}")
 
             # 지정된 시간 동안 녹화
-            while self.is_recording and (time.time() - start_time) < duration:
+            while self.is_recording:
+                # 먼저 시간 체크 (정확한 30초 보장)
+                current_time = time.time()
+                if (current_time - start_time) >= duration:
+                    break
+
                 try:
                     # 큐에서 JPEG 프레임 가져오기
                     frame_data = self.frame_queue.get(timeout=0.1)
@@ -209,6 +234,10 @@ class FrameRecorder:
                     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
                     if frame is not None:
+                        # 프레임 처리 전 시간 재확인 (정밀 제어)
+                        if (time.time() - start_time) >= duration:
+                            break
+
                         # 필요시 크기 조정
                         if frame.shape[:2] != (frame_size[1], frame_size[0]):
                             frame = cv2.resize(frame, frame_size)
@@ -235,6 +264,17 @@ class FrameRecorder:
             logger.error(f"[RECORDER] 녹화 오류: {e}")
         finally:
             self.is_recording = False
+            completed_mode = self.recording_mode
+            self.recording_mode = None
+
+            # 완료 콜백 호출
+            if self.completion_callback and completed_mode == "manual_single":
+                try:
+                    self.completion_callback(self.camera_id)
+                except Exception as callback_error:
+                    logger.error(f"[RECORDER] 완료 콜백 오류: {callback_error}")
+
+            self.completion_callback = None
 
 
 class CameraManager:
@@ -255,6 +295,10 @@ class CameraManager:
         # 연속 녹화 시스템
         self.recording_enabled = self.config.get("system.auto_recording", False)
         self.recording_threads = {}
+        self.recording_paused = {}  # 카메라별 자동 녹화 일시 중단 상태
+        self.sync_recording_event = threading.Event()  # 동기화 이벤트
+        self.next_recording_time = None  # 다음 녹화 시작 시간
+        self.continuous_recording_active = False  # 연속 녹화 활성 상태 (IDLE 방지)
 
         # 해상도 설정 (config에서 로드)
         self.RESOLUTIONS = self.config.get("resolutions", {
@@ -565,17 +609,79 @@ class CameraManager:
         
         return True
     
+    def pause_auto_recording(self, camera_id: int):
+        """카메라별 자동 녹화 일시 중단"""
+        self.recording_paused[camera_id] = True
+        recorder = self.recorders.get(camera_id)
+        if recorder and recorder.is_recording and recorder.recording_mode == "auto_continuous":
+            recorder.force_stop_recording()
+        logger.info(f"[RECORDING] 카메라 {camera_id} 자동 녹화 일시 중단")
+
+    def resume_auto_recording(self, camera_id: int):
+        """카메라별 자동 녹화 재개"""
+        self.recording_paused[camera_id] = False
+        logger.info(f"[RECORDING] 카메라 {camera_id} 자동 녹화 재개")
+
+    def start_manual_recording(self, camera_id: int, duration: int = 30):
+        """수동 녹화 시작 (자동 녹화 일시 중단 후)"""
+        if camera_id not in self.recorders:
+            logger.error(f"[ERROR] 카메라 {camera_id} 레코더 없음")
+            return False
+
+        recorder = self.recorders[camera_id]
+
+        # 자동 녹화 중인 경우 일시 중단
+        if recorder.is_recording and recorder.recording_mode == "auto_continuous":
+            logger.info(f"[RECORDING] 카메라 {camera_id} 자동 녹화 중단 후 수동 녹화 시작")
+            self.pause_auto_recording(camera_id)
+            # 잠시 대기 후 수동 녹화 시작
+            time.sleep(0.5)
+
+        # 수동 녹화 완료 후 자동 녹화 재개 콜백 정의
+        def on_manual_recording_complete(camera_id):
+            logger.info(f"[RECORDING] 카메라 {camera_id} 수동 녹화 완료 - 자동 녹화 재개")
+            self.resume_auto_recording(camera_id)
+
+        # 수동 녹화용 타임스탬프 생성
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # 수동 녹화 시작
+        success = recorder.start_recording(
+            duration=duration,
+            mode="manual_single",
+            completion_callback=on_manual_recording_complete,
+            timestamp_str=timestamp_str
+        )
+        if success:
+            logger.info(f"[RECORDING] 카메라 {camera_id} 수동 녹화 시작 ({duration}초)")
+        return success
+
     def start_continuous_recording(self, camera_id: int, interval: int = 30):
         """연속 녹화 시작"""
         if camera_id not in self.recorders:
             logger.error(f"[ERROR] 카메라 {camera_id} 레코더 없음")
             return
 
+        # 일시 중단 상태 초기화
+        self.recording_paused[camera_id] = False
+
         def continuous_record():
             self.recording_threads[camera_id] = True
             while self.recording_threads.get(camera_id, False):
+                # 일시 중단 상태 확인
+                if self.recording_paused.get(camera_id, False):
+                    time.sleep(1)  # 일시 중단 중이면 1초 대기
+                    continue
+
                 recorder = self.recorders[camera_id]
-                recorder.start_recording(duration=interval)
+
+                # 수동 녹화 중이면 대기
+                if recorder.is_recording and recorder.recording_mode == "manual_single":
+                    time.sleep(1)
+                    continue
+
+                # 자동 연속 녹화 시작
+                recorder.start_recording(duration=interval, mode="auto_continuous")
 
                 # 통계 업데이트
                 self.stream_stats[camera_id]["recording"] = True
@@ -590,17 +696,129 @@ class CameraManager:
         logger.info(f"[RECORDING] 카메라 {camera_id} 연속 녹화 시작 ({interval}초 간격)")
 
     def enable_recording(self):
-        """모든 활성 카메라에 대해 녹화 활성화"""
+        """모든 활성 카메라에 대해 동기화된 녹화 활성화"""
         self.recording_enabled = True
-        for camera_id in self.camera_instances.keys():
-            self.start_continuous_recording(camera_id)
+
+        # 동기화된 연속 녹화 시작
+        if len(self.camera_instances) > 1:
+            # 다중 카메라 - 동기화 모드
+            self.start_synchronized_recording()
+        else:
+            # 단일 카메라 - 기존 방식
+            for camera_id in self.camera_instances.keys():
+                self.start_continuous_recording(camera_id)
+
         logger.info("[RECORDING] 녹화 기능 활성화")
+
+    def start_synchronized_recording(self, interval: int = 30):
+        """동기화된 연속 녹화 시작 (모든 카메라가 동시에 녹화)"""
+        logger.info(f"[SYNC-RECORDING] 동기화된 녹화 시작 (카메라: {list(self.camera_instances.keys())})")
+
+        # 연속 녹화 상태 플래그 (IDLE 방지용)
+        self.continuous_recording_active = True
+
+        # 마스터 스레드가 타이밍 제어
+        def sync_master():
+            while self.recording_enabled:
+                # 다음 녹화 시작 시간 계산
+                self.next_recording_time = time.time()
+                timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                # 모든 카메라에 대해 녹화 워커 시작
+                recording_threads = []
+                active_recorders = []
+                logger.debug(f"[SYNC-RECORDING] 녹화 사이클 시작, 활성 카메라: {list(self.camera_instances.keys())}")
+
+                for camera_id in list(self.camera_instances.keys()):
+                    if camera_id not in self.recorders:
+                        continue
+
+                    # 일시 중단 확인
+                    if self.recording_paused.get(camera_id, False):
+                        continue
+
+                    # 수동 녹화 중이면 스킵
+                    recorder = self.recorders[camera_id]
+                    if recorder.is_recording and recorder.recording_mode == "manual_single":
+                        continue
+
+                    # 녹화 워커 스레드 - 로컬 변수로 확실히 캡처
+                    current_camera_id = camera_id
+                    current_recorder = recorder
+
+                    def create_record_worker(cam_id, rec, ts):
+                        """클로저 문제 완전 해결을 위한 팩토리 함수"""
+                        def worker():
+                            try:
+                                logger.debug(f"[SYNC-RECORDING] 카메라 {cam_id} 녹화 시작 시도")
+                                rec.start_recording(
+                                    duration=interval,
+                                    mode="auto_continuous",
+                                    timestamp_str=ts
+                                )
+                            except Exception as e:
+                                logger.error(f"[SYNC-RECORDING] 카메라 {cam_id} 녹화 오류: {e}")
+                        return worker
+
+                    thread = threading.Thread(
+                        target=create_record_worker(current_camera_id, current_recorder, timestamp_str),
+                        daemon=True
+                    )
+                    thread.start()
+                    recording_threads.append(thread)
+                    active_recorders.append(recorder)
+                    logger.debug(f"[SYNC-RECORDING] 카메라 {current_camera_id} 스레드 시작됨")
+
+                # 더 나은 대기 방식: 29.5초 대기 후 녹화 완료 확인
+                time.sleep(interval - 0.5)  # 29.5초 대기
+
+                # 모든 녹화가 실제로 완료될 때까지 짧은 간격으로 확인
+                max_wait_time = 2.0  # 최대 2초 추가 대기
+                wait_start = time.time()
+
+                while time.time() - wait_start < max_wait_time:
+                    all_completed = True
+                    recording_status = {}
+
+                    for i, recorder in enumerate(active_recorders):
+                        camera_id = list(self.camera_instances.keys())[i]  # 인덱스로 카메라 ID 찾기
+                        is_still_recording = recorder.is_recording and recorder.recording_mode == "auto_continuous"
+                        recording_status[camera_id] = is_still_recording
+
+                        if is_still_recording:
+                            all_completed = False
+
+                    if all_completed:
+                        # 모든 녹화 완료 - 즉시 다음 사이클 시작
+                        logger.debug(f"[SYNC-RECORDING] 모든 녹화 완료, 상태: {recording_status}")
+                        break
+
+                    time.sleep(0.05)  # 50ms 간격으로 체크
+
+                # 스레드 정리
+                for thread in recording_threads:
+                    if thread.is_alive():
+                        thread.join(timeout=0.1)
+
+        # 마스터 스레드 시작
+        master_thread = threading.Thread(target=sync_master, daemon=True)
+        master_thread.start()
+        self.recording_threads['sync_master'] = master_thread
+        logger.info("[SYNC-RECORDING] 동기화 마스터 스레드 시작")
 
     def disable_recording(self):
         """모든 녹화 비활성화"""
         self.recording_enabled = False
+        self.continuous_recording_active = False  # 연속 녹화 상태 비활성화
+
+        # 동기화 마스터 중지
+        if 'sync_master' in self.recording_threads:
+            self.recording_threads['sync_master'] = False
+
         for camera_id in self.recording_threads.keys():
-            self.recording_threads[camera_id] = False
+            if camera_id != 'sync_master':
+                self.recording_threads[camera_id] = False
+
         for recorder in self.recorders.values():
             recorder.stop_recording()
         logger.info("[RECORDING] 녹화 기능 비활성화")
@@ -793,8 +1011,16 @@ def main():
     
     atexit.register(cleanup)
     
-    # 기본 카메라 시작 중요한 부분임
-    camera_manager.start_camera_stream(0)
+    # 듀얼 카메라 모드 설정 확인
+    dual_camera_mode = config_manager.get("system.dual_camera_mode", False)
+
+    if dual_camera_mode:
+        # 듀얼 카메라 모드로 시작
+        logger.info("[CONFIG] 듀얼 카메라 모드로 시작")
+        camera_manager.enable_dual_mode()
+    else:
+        # 기본 카메라 시작
+        camera_manager.start_camera_stream(0)
 
     # 자동 녹화 활성화 (config 기반)
     if config_manager.get("system.auto_recording", True):
