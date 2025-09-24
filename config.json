@@ -1,0 +1,38 @@
+{
+  "recording": {
+    "enabled": true,
+    "segment_duration": 31,
+    "overlap_duration": 1,
+    "bitrate": 5000000,
+    "framerate": 30,
+    "resolution": [640, 480],
+    "cameras": {
+      "0": {
+        "enabled": true,
+        "storage_path": "videos/cam0"
+      },
+      "1": {
+        "enabled": true,
+        "storage_path": "videos/cam1"
+      }
+    },
+    "cleanup": {
+      "enabled": false,
+      "max_age_days": 30,
+      "min_free_space_gb": 10
+    }
+  },
+  "streaming": {
+    "max_clients": 2,
+    "default_quality": "640x480",
+    "mirror_mode": true,
+    "buffer_size": 10,
+    "stats_interval": 2000,
+    "heartbeat_interval": 3000
+  },
+  "system": {
+    "web_port": 8001,
+    "log_level": "INFO",
+    "gpu_memory_split": 256
+  }
+}

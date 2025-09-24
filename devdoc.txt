@@ -32,180 +32,44 @@
   - 30초 단위 녹화 지원 ✅
   - 스트리밍 중단 없이 녹화 ✅
 
+[cliet Web] -- [cliet Web] --[cliet Web] --[cliet Web] -- [cliet Web]
+                              |
+                            [HUB]
+                              |
+---------------       ---------------      ---------------
+[라즈베리파이5 0]  ---- [라즈베리파이5 1]  ---- [라즈베리파이5 2] --- [NAS(영상 mp4 저장 후 user 스트리밍, 탐색)] 
+---------------       ---------------      ---------------
 
-● 🎯 CCTV 시스템 함수 호출 플로우차트
 
-  🚀 SYSTEM START
-  │
-  ├─ 📁 webmain.py 실행
-  │  │
-  │  ├─ 1. main() 함수 시작
-  │  ├─ 2. SimpleCameraManager() 생성
-  │  ├─ 3. CCTVWebAPI(camera_manager) 생성
-  │  ├─ 4. start_camera_stream(0) - 카메라 0 시작
-  │  ├─ 5. start_camera_stream(1) - 카메라 1 시작
-  │  ├─ 6. enable_recording() - 연속 녹화 시작
-  │  └─ 7. uvicorn.run() - 웹서버 시작 (포트 8001)
-  │
-  ├─ 🌐 브라우저 접속 (http://localhost:8001)
-  │  │
-  │  ├─ 8. GET "/" → index.html 로드
-  │  └─ 9. script.js 로드 및 실행
-  │
-  ├─ 📱 클라이언트 초기화 (script.js)
-  │  │
-  │  ├─ 10. DOMContentLoaded 이벤트
-  │  │   │
-  │  │   ├─ 11. initializeDualMode()
-  │  │   │   ├─ setActiveButton('dual-btn')
-  │  │   │   └─ 듀얼 뷰 UI 설정
-  │  │   │
-  │  │   ├─ 12. updateStats() (최초 1회)
-  │  │   │   └─ GET "/api/stats" (매 2초)
-  │  │   │
-  │  │   ├─ 13. checkStreamActivity() (최초 1회)
-  │  │   │   ├─ HEAD "/stream/0" (하트비트 체크)
-  │  │   │   └─ updateRecordingIndicator() 호출
-  │  │   │
-  │  │   └─ 14. updateRecordingIndicator() (100ms 후)
-  │  │       ├─ heartbeat-text 상태 확인
-  │  │       └─ recording-text를 REC/IDLE로 설정
-  │
-  ├─ 🔄 정기 실행 (Intervals)
-  │  │
-  │  ├─ 매 2초: updateStats()
-  │  │   └─ GET "/api/stats" → 프레임 통계 업데이트
-  │  │
-  │  └─ 매 3초: checkStreamActivity()
-  │      ├─ HEAD "/stream/0" 또는 "/stream" (현재 모드에 따라)
-  │      ├─ 첫 번째 인디케이터: LIVE/DELAY/BUSY/OFFLINE
-  │      └─ updateRecordingIndicator() 호출
-  │          └─ 두 번째 인디케이터: REC/IDLE
-  │
-  ├─ 🎥 스트리밍 요청
-  │  │
-  │  ├─ 듀얼 모드:
-  │  │   ├─ GET "/stream/0" → 카메라 0 스트림
-  │  │   └─ GET "/stream/1" → 카메라 1 스트림
-  │  │
-  │  └─ 싱글 모드:
-  │      └─ GET "/stream" → 현재 활성 카메라 스트림
-  │
-  ├─ 🎛️ 사용자 상호작용
-  │  │
-  │  ├─ 듀얼/싱글 모드 전환:
-  │  │   ├─ toggleDualMode() → POST "/api/dual_mode/{enable}"
-  │  │   └─ switchToSingleCamera() → POST "/switch/{camera_id}"
-  │  │
-  │  ├─ 해상도 변경:
-  │  │   └─ changeResolution() → POST "/api/resolution/{resolution}"
-  │  │
-  │  └─ 녹화 관련 (현재 비활성화):
-  │      ├─ toggleRecording() → POST "/api/recording/{camera_id}/toggle"
-  │      └─ updateRecordingStatus() → GET "/api/recording/status"
-  │
-  └─ 🔧 백엔드 처리 (webmain.py + api.py)
-      │
-      ├─ SimpleCameraManager 클래스:
-      │   ├─ start_camera_stream()
-      │   ├─ stop_camera_stream()
-      │   ├─ enable_dual_mode()
-      │   ├─ disable_dual_mode()
-      │   └─ generate_frames()
-      │
-      ├─ SimpleFrameRecorder 클래스:
-      │   ├─ start_recording()
-      │   ├─ stop_recording()
-      │   └─ save_frames() (30초 단위)
-      │
-      └─ CCTVWebAPI 클래스:
-          ├─ setup_routes() - API 엔드포인트 설정
-          ├─ stream_response() - MJPEG 스트림 응답
-          └─ 각종 API 핸들러들
 
-● 📊 핵심 인디케이터 업데이트 플로우
+# 수정 방향
+  def stop_camera_stream(self, camera_id: int):
+      # 스트리밍만 중지, 녹화는 유지
+      # 연속 녹화는 enable_recording()/disable_recording()에서만 제어
 
-  🎯 인디케이터 상태 관리
-  │
-  ├─ 첫 번째 인디케이터 (heartbeat-indicator)
-  │  ├─ 업데이트 주기: 매 3초
-  │  ├─ 함수: checkStreamActivity()
-  │  ├─ 상태: LIVE/DELAY/BUSY/OFFLINE
-  │  └─ 역할: 서버 연결 상태 표시
-  │
-  └─ 두 번째 인디케이터 (recording-indicator)
-     ├─ 업데이트 주기: 하트비트 체크 시마다
-     ├─ 함수: updateRecordingIndicator()
-     ├─ 상태: REC/IDLE
-     └─ 역할: 스트리밍 활성 상태 표시
+  4. 리소스 공유 최적화
 
-  🔄 데이터 흐름
+  - Picamera2 인스턴스: 공유 유지
+  - 스트리밍: lores 스트림 사용
+  - 녹화: main 스트림 사용 (GPU H.264)
+  - 독립 운영: 서로 간섭 없이 동시 작동
 
-  1. 시작: python3 webmain.py
-  2. 서버 초기화: 카메라 시작 → 웹서버 시작
-  3. 클라이언트 연결: 브라우저 → index.html → script.js 로드
-  4. 정기 업데이트: 하트비트(3초) + 통계(2초) 주기
-  5. 사용자 상호작용: 버튼 클릭 → API 호출 → 상태 변경
+  5. 구체적 수정 포인트
 
-  이 플로우차트는 현재 실행되는 전체 시스템의 함수 호출 순서를 보여줍니다!
+  A. webmain.py:327 라인
+  # 제거: self.recorders[camera_id].stop_recording()
+  # 추가: 스트리밍 관련 정리만
 
-==========================================================
-● 📊 웹 UI 분석 결과
+  B. 연속 녹화 생명주기
+  시작: main() → enable_recording()
+  유지: 웹 접속/해제와 무관하게 지속
+  중지: shutdown() 또는 명시적 disable_recording()만
 
-  현재 구현된 주요 기능
+  C. 듀얼 모드 전환
+  # disable_dual_mode()에서 녹화 유지
+  # 카메라 전환만 수행, 녹화는 지속
 
-  1. 듀얼/싱글 뷰 전환 ✅
+  🎯 기대 효과
 
-  - 듀얼 뷰: 두 카메라 동시 표시 (기본 모드)
-  - 싱글 뷰: 카메라 0 또는 1 개별 표시
-  - 버튼 클릭으로 즉시 전환
-
-  2. 실시간 모니터링 ✅
-
-  - 상태 표시: FPS, 프레임 수, 클라이언트 수
-  - 하트비트: LIVE/OFFLINE/DELAY/BUSY 상태
-  - 녹화 상태: 각 카메라별 녹화 상태 표시 (현재 숨김)
-
-  3. 스트리밍 기능 ✅
-
-  - MJPEG 방식 실시간 스트리밍
-  - 최대 2명 동시 접속 지원
-  - 480p 해상도 (640×480)
-
-  4. 반응형 디자인 ✅
-
-  - 그리드 레이아웃으로 상태 정보 표시
-  - 플렉스박스로 버튼 그룹 정렬
-  - 카메라 라벨 오버레이
-
-  🔧 개선 가능한 사항
-
-  UI/UX 개선
-
-  1. 다크 모드 지원 - 야간 모니터링용
-  2. 전체화면 모드 - F11 단축키 지원
-  3. 모바일 최적화 - 터치 제스처 지원
-  4. 키보드 단축키 - 1,2,D키로 뷰 전환
-
-  기능 추가
-
-  1. 720p 해상도 옵션 - 현재 480p만 지원 => 향후 방향임.
-  2. 녹화 버튼 활성화 - 현재 숨김 상태
-  3. 스냅샷 기능 - 정지 화면 캡처
-  4. 줌 인/아웃 - 특정 영역 확대
-
-  성능 최적화
-
-  1. 프레임 드랍 표시 - 네트워크 상태 모니터링
-  2. 자동 품질 조절 - 네트워크 속도에 따른 해상도 변경
-  3. 버퍼링 표시 - 로딩 스피너 추가
-
-  💡 현재 UI 강점
-
-  - 깔끔한 디자인: 미니멀하고 직관적
-  - 빠른 반응성: API 호출 중복 방지
-  - 안정적 작동: 에러 핸들링 완備
-  - 실시간 업데이트: 2초마다 상태 갱신
-
-  웹 UI는 전반적으로 잘 구현되어 있으며, 기본 CCTV 기능을 충실히
-  수행합니다.
+  ✅ 24시간 연속 녹화 보장✅ 웹 스트리밍 독립성 확보✅ 시스템 안정성 향상✅ 리소스 효율성 유지
+  

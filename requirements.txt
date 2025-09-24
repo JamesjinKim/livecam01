@@ -1,17 +1,25 @@
-# Smart Security System Dependencies
-# Auto-switching CCTV and Motion Detection System
+# SHT 듀얼 LIVE 카메라 - Python 의존성
+# 라즈베리파이 5 기반 듀얼 카메라 CCTV 시스템
 
-# Web Framework & API
+# 웹 프레임워크 & API
 fastapi>=0.104.0
 uvicorn>=0.24.0
 
-# Computer Vision & Image Processing  
+# 영상 처리 & 컴퓨터 비전
 opencv-python>=4.8.0
 numpy>=1.24.0
-pillow>=10.0.0
 
-# System Monitoring & Process Management
+# 시스템 모니터링
 psutil>=5.9.0
 
-# Configuration Management
-PyYAML>=6.0
+# 주의사항:
+# - picamera2는 시스템 패키지로 설치 필요: sudo apt install python3-picamera2
+# - libcamera는 시스템 패키지로 설치 필요: sudo apt install python3-libcamera
+# - ffmpeg는 시스템 패키지로 설치 필요: sudo apt install ffmpeg
+
+# 설치 명령어:
+# pip3 install -r requirements.txt
+#
+# 시스템 패키지 설치:
+# sudo apt update
+# sudo apt install -y python3-picamera2 python3-libcamera ffmpeg
